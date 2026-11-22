@@ -7,6 +7,7 @@ import type { Tile } from '@norikub/core/tiles';
 import { dropAttribute, toMove, useDrag } from './drag.ts';
 import type { Drag, DropTarget } from './drag.ts';
 import { frameText, noteText, refusalText, splitText, tileName } from './messages.ts';
+import { fitPile, pileSpot } from './pile.ts';
 import { FLIGHT_MS, usePlayback } from './playback.ts';
 import { PERSON, drawTile, finishTurn, moveTile, probe, undoTurn } from './session.ts';
 import type { Session } from './session.ts';
@@ -242,7 +243,8 @@ export function GameScreen({
     // lands there.
     arriving: watching?.step.kind === 'drawing' && watching.step.face?.id === tile.id,
   });
-  const poolCount = watching?.pool ?? game.pool.length;
+  const pile = watching?.pile ?? fitPile(session.pile, game.pool.length);
+  const poolCount = pile.length;
   const flyingFrom = watching?.step.kind === 'drawing' ? watching.step.pick : null;
 
   const opponents = game.players.flatMap((player, seat) =>
@@ -317,22 +319,31 @@ export function GameScreen({
         // Face down, as at a real table: the buttons carry their place in the pool and nothing
         // else, so the page itself never says what a tile is before it is drawn. It stays on
         // screen while a turn plays back, as the place a drawn tile leaves from, but takes no
-        // pick then.
+        // pick then. Each lies at its own spot in a scattered pile, keyed by the spot, so a
+        // draw takes one tile away and leaves the rest where they lie (KUB-25).
         <section className="pool" aria-label="Face-down tiles: pick one to draw">
-          {Array.from({ length: poolCount }, (_, pick) => (
-            <button
-              key={pick}
-              type="button"
-              className="face-down"
-              aria-label="Face-down tile"
-              aria-disabled={watching !== null || undefined}
-              data-pick={pick}
-              data-lifted={pick === flyingFrom || undefined}
-              onClick={() => {
-                if (watching === null) onChange(drawTile(session, pick));
-              }}
-            />
-          ))}
+          {pile.map((spot, pick) => {
+            const { x, y, turn: angle } = pileSpot(spot);
+            return (
+              <button
+                key={spot}
+                type="button"
+                className="face-down"
+                aria-label="Face-down tile"
+                aria-disabled={watching !== null || undefined}
+                data-pick={pick}
+                data-lifted={pick === flyingFrom || undefined}
+                style={{
+                  left: `calc(${x.toFixed(4)} * (100% - var(--back-w)))`,
+                  top: `calc(${y.toFixed(4)} * (100% - var(--back-h)))`,
+                  transform: `rotate(${angle}deg)`,
+                }}
+                onClick={() => {
+                  if (watching === null) onChange(drawTile(session, pick));
+                }}
+              />
+            );
+          })}
         </section>
       )}
 

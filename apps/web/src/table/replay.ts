@@ -3,6 +3,9 @@ import type { Game } from '@norikub/core/game';
 import type { Tile } from '@norikub/core/tiles';
 import { move, startTurn } from '@norikub/core/turn';
 
+import { takeFromPile } from './pile.ts';
+import type { Pile } from './pile.ts';
+
 /**
  * One step of a turn as the person watches it: the table and the tile counts at that moment,
  * and what just happened. A frame holds what the person could see at the table and no more,
@@ -15,7 +18,8 @@ export type Frame = {
   readonly table: readonly (readonly Tile[])[];
   /** Tiles in each seat's rack, by seat. */
   readonly counts: readonly number[];
-  readonly pool: number;
+  /** The face-down tiles' spots at that moment; how many there are is the pool's size. */
+  readonly pile: Pile;
   readonly step: Step;
 };
 
@@ -38,7 +42,13 @@ const counts = (game: Game): number[] => game.players.map((player) => player.rac
  * person's own draw. A pass, with the pool empty, has no tile to show travelling: it is one
  * `passed` frame.
  */
-export function drawFrames(before: Game, after: Game, pick: number, face: Tile | null): Frame[] {
+export function drawFrames(
+  before: Game,
+  after: Game,
+  pick: number,
+  face: Tile | null,
+  pile: Pile,
+): Frame[] {
   const seat = before.current;
   const name = before.players[seat]?.name ?? '';
   const passed = after.pool.length === before.pool.length;
@@ -47,7 +57,7 @@ export function drawFrames(before: Game, after: Game, pick: number, face: Tile |
     name,
     table: after.table,
     counts: counts(after),
-    pool: after.pool.length,
+    pile: passed ? pile : takeFromPile(pile, pick),
     step: passed ? { kind: 'passed' } : { kind: 'drew', face },
   };
   if (passed) return [landed];
@@ -57,7 +67,7 @@ export function drawFrames(before: Game, after: Game, pick: number, face: Tile |
       name,
       table: before.table,
       counts: counts(before),
-      pool: before.pool.length,
+      pile,
       step: { kind: 'drawing', pick, face },
     },
     landed,
@@ -69,9 +79,10 @@ export function drawFrames(before: Game, after: Game, pick: number, face: Tile |
  * moves are replayed through the engine's own `move`, in the bot's order: the screen shows
  * what the engine did and judges nothing (invariant 1). The last frame is the table the
  * engine accepted. A refused proposal ended in a draw, so it is shown as one. A bot draws the
- * pool's last tile (core `draw` with no pick), so that is the one shown leaving.
+ * pool's last tile (core `draw` with no pick), so that is the one shown leaving. `pile` is
+ * the pile before the turn; the last frame's is the pile after it.
  */
-export function framesOf(before: Game, result: BotTurn): Frame[] {
+export function framesOf(before: Game, result: BotTurn, pile: Pile): Frame[] {
   const seat = before.current;
   const name = before.players[seat]?.name ?? '';
   const frames: Frame[] = [];
@@ -91,7 +102,7 @@ export function framesOf(before: Game, result: BotTurn): Frame[] {
         name,
         table: turn.table,
         counts: now,
-        pool: before.pool.length,
+        pile,
         step: { kind: 'placed', tile },
       });
     }
@@ -101,12 +112,12 @@ export function framesOf(before: Game, result: BotTurn): Frame[] {
       name,
       table: result.game.table,
       counts: counts(result.game),
-      pool: result.game.pool.length,
+      pile,
       step: { kind: 'done', played },
     });
     return frames;
   }
-  return drawFrames(before, result.game, before.pool.length - 1, null);
+  return drawFrames(before, result.game, before.pool.length - 1, null, pile);
 }
 
 function findOnTable(table: readonly (readonly Tile[])[], id: string): Tile | undefined {

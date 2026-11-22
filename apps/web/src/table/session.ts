@@ -5,6 +5,8 @@ import type { Tile } from '@norikub/core/tiles';
 import { drawInstead, endTurn, move, startTurn, takeBack } from '@norikub/core/turn';
 import type { Move, MoveRefusal, Turn, TurnFault } from '@norikub/core/turn';
 
+import { fitPile, takeFromPile } from './pile.ts';
+import type { Pile } from './pile.ts';
 import { dealRows, placeOnRack, reconcileRows } from './rack.ts';
 import type { RackRows } from './rack.ts';
 import { drawFrames, framesOf } from './replay.ts';
@@ -43,6 +45,8 @@ export type Session = {
   readonly startRows: RackRows;
   readonly notes: readonly Note[];
   readonly replay: readonly Frame[];
+  /** The face-down tiles' spots, parallel to `game.pool` (KUB-25). */
+  readonly pile: Pile;
 };
 
 /** Where on the rack a tile is let go: a row, and the place along it. */
@@ -55,15 +59,16 @@ export function newSession(seed: number): Session {
 /**
  * A session at the person's turn, after any bots due before it have played. With no rows
  * given, the rack is laid out as a fresh deal. `lead` is played back before the bots' turns:
- * the person's own draw.
+ * the person's own draw. `pile` is the pile for `game.pool`; with none, the pile is dealt.
  */
 export function fromGame(
   game: Game,
   notes: readonly Note[],
   rows?: RackRows,
   lead: readonly Frame[] = [],
+  pile?: Pile,
 ): Session {
-  const played = playBots(game);
+  const played = playBots(game, fitPile(pile, game.pool.length));
   const turn = played.game.status.kind === 'playing' ? startTurn(played.game) : null;
   const rack = played.game.players[PERSON]?.rack ?? [];
   const laidOut = rows === undefined ? dealRows(rack) : reconcileRows(rows, rack);
@@ -74,6 +79,7 @@ export function fromGame(
     startRows: laidOut,
     notes: [...notes, ...played.notes],
     replay: [...lead, ...played.frames],
+    pile: played.pile,
   };
 }
 
@@ -81,15 +87,21 @@ export function fromGame(
  * The bots take their turns until it is the person's turn or the game is over. They decide at
  * once; the frames are how the screen shows it afterwards, at a pace a person can follow.
  */
-function playBots(game: Game): { game: Game; notes: Note[]; frames: Frame[] } {
+function playBots(
+  game: Game,
+  dealt: Pile,
+): { game: Game; notes: Note[]; frames: Frame[]; pile: Pile } {
   const notes: Note[] = [];
   const frames: Frame[] = [];
   let current = game;
+  let pile = dealt;
   while (current.status.kind === 'playing' && current.current !== PERSON) {
     const seat = current.current;
     const before = current.players[seat]?.rack.length ?? 0;
     const result = takeBotTurn(current);
-    frames.push(...framesOf(current, result));
+    const turnFrames = framesOf(current, result, pile);
+    frames.push(...turnFrames);
+    pile = turnFrames.at(-1)?.pile ?? pile;
     const next = result.game;
     const after = next.players[seat]?.rack.length ?? 0;
     // A bot that draws ends with one tile more, and has played none.
@@ -97,7 +109,7 @@ function playBots(game: Game): { game: Game; notes: Note[]; frames: Frame[] } {
     notes.push({ kind: 'bot', name: current.players[seat]?.name ?? '', played });
     current = next;
   }
-  return { game: current, notes, frames };
+  return { game: current, notes, frames, pile };
 }
 
 /** What the engine would say to a move, without making it: used while a tile is dragged. */
@@ -143,7 +155,7 @@ export function finishTurn(session: Session): Session {
   if (!result.ok) {
     return { ...session, notes: result.faults.map((fault): Note => ({ kind: 'fault', fault })) };
   }
-  return fromGame(result.game, [], session.rows);
+  return fromGame(result.game, [], session.rows, [], session.pile);
 }
 
 export function undoTurn(session: Session): Session {
@@ -170,10 +182,12 @@ export function drawTile(session: Session, pick?: number): Session {
     session.turn.start.players[PERSON]?.rack ?? [],
     session.startRows,
   );
+  const pile = fitPile(session.pile, session.turn.start.pool.length);
   // A pass is told in the note alone; only a tile drawn has something to watch.
   const lead =
     result.drawn === null || pick === undefined
       ? []
-      : drawFrames(session.turn.start, result.game, pick, result.drawn);
-  return fromGame(result.game, [{ kind: 'drew', tile: result.drawn }], back, lead);
+      : drawFrames(session.turn.start, result.game, pick, result.drawn, pile);
+  const after = pick === undefined || result.drawn === null ? pile : takeFromPile(pile, pick);
+  return fromGame(result.game, [{ kind: 'drew', tile: result.drawn }], back, lead, after);
 }
