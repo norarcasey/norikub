@@ -8,6 +8,12 @@ first a full game against two bot players, later games against friends online.
 
 The MVP: Nora plays a full game by the core rules against two bot players.
 
+**Games with friends will be played on one Cloudflare Durable Object per table**, as Hanora's
+are (decided in `KUB-12`, 22 Nov 2026, from `HAN/HAN-1`; `docs/online.md` has why, what
+Norikub's long shared turn adds, and the tickets that build it). The object runs
+`packages/core` and sends each seat only its own view. A game against the bots stays on the
+device.
+
 ---
 
 ## Invariants
