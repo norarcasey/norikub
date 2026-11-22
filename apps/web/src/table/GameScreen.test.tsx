@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { layout } from '../../../../packages/core/src/fixtures.test-helpers.ts';
+import type { Game } from '../../../../packages/core/src/game.ts';
 import { GameScreen } from './GameScreen.tsx';
 import { fromGame } from './session.ts';
 import type { Session } from './session.ts';
@@ -21,7 +22,7 @@ function Harness() {
       [],
     ),
   );
-  return <GameScreen session={session} onChange={setSession} />;
+  return <GameScreen session={session} onChange={setSession} onNewGame={noop} />;
 }
 
 function RunHarness() {
@@ -38,8 +39,10 @@ function RunHarness() {
       [],
     ),
   );
-  return <GameScreen session={session} onChange={setSession} />;
+  return <GameScreen session={session} onChange={setSession} onNewGame={noop} />;
 }
+
+const noop = () => undefined;
 
 /** One slot of the rack, by row and column from 0. */
 function slotAt(row: number, col: number): HTMLElement {
@@ -182,7 +185,7 @@ function SplitHarness() {
       [],
     ),
   );
-  return <GameScreen session={session} onChange={setSession} />;
+  return <GameScreen session={session} onChange={setSession} onNewGame={noop} />;
 }
 
 const setLabels = (n: number) =>
@@ -252,7 +255,7 @@ function BotsFirstHarness() {
       [],
     ),
   );
-  return <GameScreen session={session} onChange={setSession} />;
+  return <GameScreen session={session} onChange={setSession} onNewGame={noop} />;
 }
 
 const status = () => screen.getByRole('status').textContent;
@@ -343,5 +346,76 @@ describe('a bot turn on screen', () => {
     expect(screen.getByRole('group', { name: 'Set 1' }).textContent).toContain('9');
     wait(5000);
     expect(status()).toBe('P1 played 4 tiles. P2 drew a tile.');
+  });
+});
+
+/**
+ * Two passes in already, with the pool empty: the person's pass is the third in a row, so the
+ * game ends on the lowest rack. The pool's tiles are in P2's rack, which makes P2's the
+ * highest by far.
+ */
+function exhausted(): Game {
+  const game = layout([{ rack: ['red-1-a'] }, { rack: ['blue-2-a', 'blue-3-a'] }, { rack: [] }]);
+  return {
+    ...game,
+    players: game.players.map((player, seat) =>
+      seat === 2 ? { ...player, rack: game.pool } : player,
+    ),
+    pool: [],
+    passes: 2,
+  };
+}
+
+function ScoresHarness({ game, onNewGame }: { game: Game; onNewGame: () => void }) {
+  const [session, setSession] = useState<Session>(() => fromGame(game, []));
+  return <GameScreen session={session} onChange={setSession} onNewGame={onNewGame} />;
+}
+
+const scoreRows = () =>
+  within(screen.getByRole('region', { name: 'Scores' }))
+    .getAllByRole('row')
+    .slice(1)
+    .map((row) => row.textContent);
+
+describe('the end of the game', () => {
+  it('shows the score screen when the person plays their last tile', () => {
+    render(<Harness />);
+    expect(screen.queryByRole('region', { name: 'Scores' })).toBeNull();
+    for (const name of ['red 13', 'blue 13', 'black 13']) {
+      fireEvent.click(rack().getByRole('button', { name }));
+      fireEvent.click(screen.queryByRole('group', { name: 'Set 2' }) ?? newSetZone());
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'End turn' }));
+    const scores = screen.getByRole('region', { name: 'Scores' });
+    expect(within(scores).getByRole('heading').textContent).toBe('You won.');
+    expect(scores.textContent).toContain('You played your last tile.');
+    // P1 holds a red 1 and P2 a blue 1: each loses 1, and the winner takes the 2.
+    expect(scoreRows()).toEqual(['You00+2', 'P111-1', 'P211-1']);
+    expect(screen.queryByRole('button', { name: 'End turn' })).toBeNull();
+    expect(screen.queryByRole('region', { name: /Face-down tiles/ })).toBeNull();
+  });
+
+  it('ends on the lowest rack when the pool has run out and nobody can play', () => {
+    render(<ScoresHarness game={exhausted()} onNewGame={noop} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pass' }));
+    const skip = screen.queryByRole('button', { name: 'Skip' });
+    if (skip !== null) fireEvent.click(skip);
+    const scores = screen.getByRole('region', { name: 'Scores' });
+    expect(within(scores).getByRole('heading').textContent).toBe('You won.');
+    expect(scores.textContent).toContain('The pool ran out');
+    const [you, p1, p2] = scoreRows();
+    expect(you).toMatch(/^You11\+\d+$/);
+    expect(p1).toBe('P125-5');
+    expect(p2).toMatch(/^P2\d+\d+-\d+$/);
+  });
+
+  it('starts again from the score screen', () => {
+    const onNewGame = vi.fn();
+    render(<ScoresHarness game={exhausted()} onNewGame={onNewGame} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pass' }));
+    const skip = screen.queryByRole('button', { name: 'Skip' });
+    if (skip !== null) fireEvent.click(skip);
+    fireEvent.click(screen.getByRole('button', { name: 'New game' }));
+    expect(onNewGame).toHaveBeenCalledOnce();
   });
 });

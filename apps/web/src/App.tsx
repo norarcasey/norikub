@@ -12,7 +12,11 @@ export function App({ seed }: { seed?: number }) {
     <main>
       <UpdateNotice />
       <h1 className="visually-hidden">Norikub</h1>
-      <GameScreen session={session} onChange={setSession} />
+      <GameScreen
+        session={session}
+        onChange={setSession}
+        onNewGame={() => setSession(newSession(Date.now()))}
+      />
     </main>
   );
 }

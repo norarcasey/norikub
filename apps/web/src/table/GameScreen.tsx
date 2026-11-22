@@ -2,11 +2,21 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode, PointerEvent as ReactPointerEvent } from 'react';
 
 import { arrangeSet, judgeSet, splitFor } from '@norikub/core/sets';
+import type { Game, Status } from '@norikub/core/game';
+import { rackPenalty } from '@norikub/core/tiles';
 import type { Tile } from '@norikub/core/tiles';
 
 import { dropAttribute, toMove, useDrag } from './drag.ts';
 import type { Drag, DropTarget } from './drag.ts';
-import { frameText, noteText, refusalText, splitText, tileName } from './messages.ts';
+import {
+  frameText,
+  noteText,
+  overText,
+  refusalText,
+  splitText,
+  tileName,
+  winnerText,
+} from './messages.ts';
 import { fitPile, pileSpot } from './pile.ts';
 import { FLIGHT_MS, usePlayback } from './playback.ts';
 import { PERSON, drawTile, finishTurn, moveTile, probe, undoTurn } from './session.ts';
@@ -147,12 +157,62 @@ function RackRow({
   );
 }
 
+type Over = Extract<Status, { kind: 'over' }>;
+
+/**
+ * The end of the game: who won, why it ended, and what each rack cost. Every number is the
+ * engine's (`finish`); the points left are shown beside the score so a reader can see where
+ * the score came from. Highest score first, the winner always at the top.
+ */
+function ScoreScreen({ game, over, onNewGame }: { game: Game; over: Over; onNewGame: () => void }) {
+  const rows = game.players
+    .map((player, seat) => ({
+      seat,
+      name: seat === PERSON ? 'You' : player.name,
+      tiles: player.rack.length,
+      left: rackPenalty(player.rack),
+      score: over.scores[seat] ?? 0,
+    }))
+    .sort((a, b) => (a.seat === over.winner ? -1 : b.seat === over.winner ? 1 : b.score - a.score));
+  return (
+    <section className="scores" aria-label="Scores">
+      <h2>{winnerText(game, over)}</h2>
+      <p>{overText(over)}</p>
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Player</th>
+            <th scope="col">Tiles left</th>
+            <th scope="col">Points left</th>
+            <th scope="col">Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.seat} data-winner={row.seat === over.winner || undefined}>
+              <th scope="row">{row.name}</th>
+              <td>{row.tiles}</td>
+              <td>{row.left}</td>
+              <td>{row.score > 0 ? `+${row.score}` : row.score}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button type="button" className="primary" onClick={onNewGame}>
+        New game
+      </button>
+    </section>
+  );
+}
+
 export function GameScreen({
   session,
   onChange,
+  onNewGame,
 }: {
   session: Session;
   onChange: (next: Session) => void;
+  onNewGame: () => void;
 }) {
   const { game, turn, notes, rows } = session;
   const [selected, setSelected] = useState<string | null>(null);
@@ -379,11 +439,7 @@ export function GameScreen({
               Skip
             </button>
           </div>
-        ) : status.kind === 'over' ? (
-          <p className="over">
-            {status.winner === PERSON ? 'You won.' : `${game.players[status.winner]?.name} won.`}
-          </p>
-        ) : (
+        ) : status.kind === 'over' ? null : (
           <div className="actions">
             <button type="button" onClick={() => onChange(undoTurn(session))}>
               Take back
@@ -399,6 +455,10 @@ export function GameScreen({
           </div>
         )}
       </div>
+
+      {watching === null && status.kind === 'over' && (
+        <ScoreScreen game={game} over={status} onNewGame={onNewGame} />
+      )}
 
       <section className="rack" aria-label="Your rack">
         {rows.map((slots, row) => (

@@ -1,3 +1,4 @@
+import type { Game, Status } from '@norikub/core/game';
 import type { Tile } from '@norikub/core/tiles';
 import type { MoveRefusal, TurnFault } from '@norikub/core/turn';
 
@@ -73,5 +74,20 @@ export function frameText(frame: Frame): string {
         : `The pool is empty, so ${frame.name} passed.`;
     case 'done':
       return `${frame.name} played ${frame.step.played} tile${frame.step.played === 1 ? '' : 's'}.`;
+  }
+}
+
+type Over = Extract<Status, { kind: 'over' }>;
+
+export function winnerText(game: Game, over: Over): string {
+  return over.winner === PERSON ? 'You won.' : `${game.players[over.winner]?.name ?? 'A bot'} won.`;
+}
+
+export function overText(over: Over): string {
+  switch (over.reason) {
+    case 'rack-emptied':
+      return over.winner === PERSON ? 'You played your last tile.' : 'They played their last tile.';
+    case 'pool-exhausted':
+      return 'The pool ran out and nobody could play, so the lowest rack wins.';
   }
 }
