@@ -198,53 +198,68 @@ export function MantaRay() {
 /**
  * The joker is Nora, drawn from the photo she attached in the animals' style: head and
  * shoulders, auburn hair and fringe, tongue out, black top, gold chain, a hint of the tattoo.
+ *
+ * The head is drawn 12% larger than its paths, grown upward from the chin, and the shoulders
+ * are 72 wide rather than 88, so the face reads on a small tile (Nora, KUB-30).
  */
+const HEAD = 'translate(50 78) scale(1.12) translate(-50 -78)';
+
 export function NoraJoker() {
   return (
     <svg className="tile-art" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
       <g stroke="#2d1e1b" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round">
-        <path d="M27 36 C 20 52 18 72 22 88 L 78 88 C 82 72 80 52 73 36 Z" fill="#a9532a" />
-        <path d="M6 100 C 8 88 22 82 38 81 L 62 81 C 78 82 92 88 94 100 Z" fill="#f2c3a5" />
+        <path
+          transform={HEAD}
+          d="M27 36 C 20 52 18 72 22 88 L 78 88 C 82 72 80 52 73 36 Z"
+          fill="#a9532a"
+        />
+        <path d="M14 100 C 16 89 27 83 40 82 L 60 82 C 73 83 84 89 86 100 Z" fill="#f2c3a5" />
         <path d="M43 68 L 43 82 C 46 86 54 86 57 82 L 57 68 Z" fill="#e8b292" />
         <path
-          d="M20 100 C 22 94 26 90 30 89 C 38 96 62 96 70 89 C 74 90 78 94 80 100 Z"
+          d="M25 100 C 26 95 29 91 33 90 C 40 96 60 96 67 90 C 71 91 74 95 75 100 Z"
           fill="#26262e"
         />
-        <path d="M30 89 L 33 82 M 70 89 L 67 82" fill="none" stroke="#26262e" strokeWidth="4" />
+        <path d="M33 90 L 35 83 M 67 90 L 65 83" fill="none" stroke="#26262e" strokeWidth="4" />
         <path d="M40 83 C 44 91 56 91 60 83" fill="none" stroke="#e0b04a" strokeWidth="2" />
-        <ellipse cx="50" cy="54" rx="19" ry="22" fill="#f6cdb0" />
-        <path
-          d="M28 50 C 24 30 36 18 50 18 C 64 18 76 30 72 50 C 70 46 69 44 68 42 Q 65 46 62 43 Q 58 47 55 43 Q 51 47 48 43 Q 44 47 41 43 Q 37 47 34 43 Q 31 46 28 50 Z"
-          fill="#b8612f"
-        />
-        <path d="M30 44 C 26 58 25 74 29 88 L 36 86 C 33 72 32 58 33 46 Z" fill="#b8612f" />
-        <path d="M70 44 C 74 58 75 74 71 88 L 64 86 C 67 72 68 58 67 46 Z" fill="#b8612f" />
-        <path
-          d="M38 27 C 44 24 54 24 60 26 M 34 34 C 36 31 38 30 40 30"
-          fill="none"
-          stroke="#da9055"
-          strokeWidth="2.5"
-        />
-        <ellipse cx="42" cy="53" rx="3" ry="3.6" fill="#1d1412" stroke="none" />
-        <ellipse cx="58" cy="53" rx="3" ry="3.6" fill="#1d1412" stroke="none" />
-        <circle cx="43" cy="51.6" r="1.1" fill="#fff" stroke="none" />
-        <circle cx="59" cy="51.6" r="1.1" fill="#fff" stroke="none" />
-        <path d="M48 58 C 49 60 51 60 52 58" fill="none" strokeWidth="2" />
-        <path
-          d="M41 63 C 44 62 56 62 59 63 C 58 69 54 72 50 72 C 46 72 42 69 41 63 Z"
-          fill="#7a2630"
-          strokeWidth="2.5"
-        />
-        <path
-          d="M42 63 C 46 64 54 64 58 63 L 57 65 C 53 66 47 66 43 65 Z"
-          fill="#fff"
-          stroke="none"
-        />
-        <path d="M45 67 C 45 74 47 79 50 79 C 53 79 55 74 55 67 Z" fill="#ef7f8e" strokeWidth="2" />
-        <path d="M50 69 L 50 75" fill="none" stroke="#c9536a" strokeWidth="1.5" />
-        <ellipse cx="36" cy="62" rx="4" ry="2.5" fill="#f4a39a" stroke="none" opacity="0.8" />
-        <ellipse cx="64" cy="62" rx="4" ry="2.5" fill="#f4a39a" stroke="none" opacity="0.8" />
-        <path d="M10 99 C 12 93 17 90 21 92 C 18 95 14 97 10 99 Z" fill="#6b6f7a" stroke="none" />
+        <g transform={HEAD}>
+          <ellipse cx="50" cy="54" rx="19" ry="22" fill="#f6cdb0" />
+          <path
+            d="M28 50 C 24 30 36 18 50 18 C 64 18 76 30 72 50 C 70 46 69 44 68 42 Q 65 46 62 43 Q 58 47 55 43 Q 51 47 48 43 Q 44 47 41 43 Q 37 47 34 43 Q 31 46 28 50 Z"
+            fill="#b8612f"
+          />
+          <path d="M30 44 C 26 58 25 74 29 88 L 36 86 C 33 72 32 58 33 46 Z" fill="#b8612f" />
+          <path d="M70 44 C 74 58 75 74 71 88 L 64 86 C 67 72 68 58 67 46 Z" fill="#b8612f" />
+          <path
+            d="M38 27 C 44 24 54 24 60 26 M 34 34 C 36 31 38 30 40 30"
+            fill="none"
+            stroke="#da9055"
+            strokeWidth="2.5"
+          />
+          <ellipse cx="42" cy="53" rx="3" ry="3.6" fill="#1d1412" stroke="none" />
+          <ellipse cx="58" cy="53" rx="3" ry="3.6" fill="#1d1412" stroke="none" />
+          <circle cx="43" cy="51.6" r="1.1" fill="#fff" stroke="none" />
+          <circle cx="59" cy="51.6" r="1.1" fill="#fff" stroke="none" />
+          <path d="M48 58 C 49 60 51 60 52 58" fill="none" strokeWidth="2" />
+          <path
+            d="M41 63 C 44 62 56 62 59 63 C 58 69 54 72 50 72 C 46 72 42 69 41 63 Z"
+            fill="#7a2630"
+            strokeWidth="2.5"
+          />
+          <path
+            d="M42 63 C 46 64 54 64 58 63 L 57 65 C 53 66 47 66 43 65 Z"
+            fill="#fff"
+            stroke="none"
+          />
+          <path
+            d="M45 67 C 45 74 47 79 50 79 C 53 79 55 74 55 67 Z"
+            fill="#ef7f8e"
+            strokeWidth="2"
+          />
+          <path d="M50 69 L 50 75" fill="none" stroke="#c9536a" strokeWidth="1.5" />
+          <ellipse cx="36" cy="62" rx="4" ry="2.5" fill="#f4a39a" stroke="none" opacity="0.8" />
+          <ellipse cx="64" cy="62" rx="4" ry="2.5" fill="#f4a39a" stroke="none" opacity="0.8" />
+        </g>
+        <path d="M17 99 C 18 94 22 91 26 93 C 23 96 20 98 17 99 Z" fill="#6b6f7a" stroke="none" />
       </g>
     </svg>
   );
