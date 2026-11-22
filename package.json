@@ -19,7 +19,8 @@
     "build": "pnpm --filter @norikub/web build",
     "app:install": "node --experimental-strip-types --no-warnings apps/mac/src/install.ts",
     "app:check": "node --experimental-strip-types --no-warnings apps/mac/src/install.ts --check",
-    "app:uninstall": "node --experimental-strip-types --no-warnings apps/mac/src/install.ts --uninstall"
+    "app:uninstall": "node --experimental-strip-types --no-warnings apps/mac/src/install.ts --uninstall",
+    "db:env": "node --experimental-strip-types --no-warnings scripts/db/local-env.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

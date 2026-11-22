@@ -11,7 +11,8 @@
       "Bash(pnpm test:*)",
       "Bash(pnpm build)",
       "Bash(gh run watch:*)",
-      "Bash(pnpm app:check)"
+      "Bash(pnpm app:check)",
+      "Bash(pnpm db:env)"
     ]
   },
   "hooks": {

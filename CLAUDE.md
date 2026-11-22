@@ -39,6 +39,26 @@ The short list. Violating one is a bug even if every test passes. Each says why 
 7. **The Mac app decides nothing the web app decides.** It loads `apps/web`; a rule written in
    Swift is a second copy that a stale bundle keeps enforcing after the page has changed.
 
+8. **Norikub's data is the `norikub` schema in CruciNora's Supabase project, and Norikub
+   touches nothing else there** (Nora, 22 Nov 2026, `KUB-9`, as Hanora's `HAN/HAN-7`).
+   CruciNora's tables in `public`, the other games' schemas, the auth settings, the signup
+   switch and the email templates are theirs: a change to them is a `CRU` ticket. Every client
+   request names the schema. Why: five apps share the project, and a request that named none
+   would read CruciNora's tables.
+9. **Row-level security on every table in `norikub`, forced, default deny, with the policy in
+   the same migration as the table.** Written from CruciNora's
+   `supabase/patterns/owned_table.sql`; its `npm run db:verify` and CI `schema` job check every
+   table in the schema against `supabase/tests/norikub_schema_invariants.sql`, so a new table is
+   held to rules written before it. anon has no USAGE on the schema at all. Owned tables carry
+   `deleted_at`, and `service_role` holds DELETE on nothing: the system never hard-deletes.
+10. **Norikub's migrations live in CruciNora's repository, not here, and go before the code
+    that needs them** (`CRU/CRU-24`). `~/src/crucinora` is the one place the shared project's
+    migrations live and the only one that pushes: a schema change for Norikub is a migration
+    there named `<timestamp>_norikub_<what>.sql`, touching only `norikub`, committed with a
+    `Runway: KUB/KUB-x` trailer, and pushed to production by Nora from CruciNora's main checkout
+    with `npm run db:push`, never the SQL editor (`CRU/CRU-10`). Nothing checks at deploy time
+    that production has the schema, so Ship it does.
+
 ## Non-goals
 
 - **Rummikub's name, branding, tile art or look.** Norikub is Nora-branded: its own name, tiles
@@ -62,6 +82,11 @@ apps/mac          the Mac app: a native window onto the same apps/web build. Swi
                   `pnpm app:install`, never by the gate or CI. `shell/App.swift` is the one
                   file the app edits
 api/              Vercel functions — every .ts is one, except under a `_` path
+scripts/db/       `db:env` only: points apps/web at CruciNora's local stack. Norikub's
+                  migrations, their checks and the stack are in ~/src/crucinora
+apps/web/src/supabase/
+                  the client: auth-js and postgrest-js, pointed at the norikub schema.
+                  docs/supabase.md has the one-time setup only a person can do
 ```
 
 A function imports the core by relative path, never by package name; a package it uses at
@@ -108,6 +133,12 @@ Every ticket ends the same way, before `complete_run` (`~/src/linora/docs/ship-i
 2. **Verify.** `pnpm verify` on the merged result: the gate, then the build. A suite too slow
    for the gate, end-to-end included, joins `verify` here, not CI. Red stops here: fix it, or
    hand the ticket back with the reason. A failure is never shipped as flaky.
+
+   Code that needs a schema change waits for it: the migration ships first, from
+   `~/src/crucinora` (`docs/supabase.md`), verified there with `npm run db:verify` and pushed
+   to production by Nora with `npm run db:push` after her **Shipit**, before the `git push`
+   here that needs it. A run that cannot confirm production has it stops for a Shipit.
+
 3. **Push.** `git push origin main`. Refused because `main` moved: rebase, verify, push again.
 4. **Deploy.** CI deploys on push. Watch the run with `gh run watch --exit-status` until the
    `deploy` job has succeeded on this commit: a push is not a deploy. A skipped deploy job

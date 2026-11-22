@@ -12,6 +12,7 @@ Node 24 and pnpm 9 (`corepack enable` picks up the version in `package.json`).
 
 ```bash
 pnpm install
+pnpm db:env   # apps/web/.env.local from CruciNora's local stack (docs/supabase.md)
 pnpm dev      # the web app
 pnpm gate     # what CI runs: format, lint, typecheck, tests with coverage
 pnpm format   # the only command that rewrites files
