@@ -26,7 +26,7 @@ const BACKGROUND_COLOUR = '#234a47';
  * the padding disappears into it; the apple icon also drops its padding, because iOS rounds the
  * corners itself and a mark shrunk inside that looks like a mistake.
  */
-const TILE_COLOUR = '#2e5e5a';
+const TILE_COLOUR = '#fff7ea';
 
 /**
  * Which build this is, as `import.meta.env.VITE_BUILD`. Read through `src/build.ts`.
