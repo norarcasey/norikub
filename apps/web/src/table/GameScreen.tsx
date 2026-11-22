@@ -202,10 +202,13 @@ export function GameScreen({
   session,
   onChange,
   onNewGame,
+  barEnd,
 }: {
   session: Session;
   onChange: (next: Session) => void;
   onNewGame: () => void;
+  /** Shown at the end of the game bar, after the pool count: the Account button (KUB-29). */
+  barEnd?: ReactNode;
 }) {
   const { game, turn, notes, rows } = session;
   // The tiles tapped, in the order tapped: one to move like a drop, or several to send
@@ -349,7 +352,10 @@ export function GameScreen({
             </li>
           ))}
         </ul>
-        <span>Pool: {poolCount}</span>
+        <div className="game-bar-end">
+          <span>Pool: {poolCount}</span>
+          {barEnd}
+        </div>
       </header>
 
       <section className="table" aria-label="Table" data-autoscroll>

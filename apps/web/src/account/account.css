@@ -1,0 +1,125 @@
+/*
+ * The sign-in panel, over the table in the table's own tokens (table/table.css): the felt for
+ * the panel, the cream of a tile for the one button that does something.
+ */
+.account-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + 48px) 16px 16px;
+  background: rgb(0 0 0 / 0.45);
+  overflow-y: auto;
+}
+
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 420px;
+  padding: 16px;
+  border: 1px solid var(--felt-edge);
+  border-radius: 12px;
+  background: var(--felt);
+  color: var(--text);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+  /* The table turns selection off for its long presses; an email address should copy. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.account h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.account p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.account form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account label {
+  font-weight: 700;
+}
+
+.account input {
+  /* 16px or more, or iOS Safari zooms the page on focus. */
+  font: inherit;
+  font-size: 1rem;
+  padding: 10px 14px;
+  border: 1px solid rgb(243 239 228 / 0.55);
+  border-radius: 10px;
+  background: var(--felt-edge);
+  color: var(--text);
+}
+
+.account #account-code {
+  letter-spacing: 0.3em;
+  font-size: 1.25rem;
+}
+
+.account button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1.5px solid var(--tile);
+  border-radius: 999px;
+  background: var(--tile);
+  color: var(--ink-black);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.account button.account-quiet {
+  align-self: flex-start;
+  min-height: 32px;
+  padding-inline: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-decoration: underline;
+  font-weight: 400;
+}
+
+.account button:focus-visible,
+.account input:focus-visible {
+  outline: 2px solid #ffd54a;
+  outline-offset: 2px;
+}
+
+.account-error {
+  color: var(--bad);
+}
+
+/* In the game bar, beside the pool count: quiet, because the game is the point. */
+.account-open {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgb(243 239 228 / 0.55);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.account-open:focus-visible {
+  outline: 2px solid #ffd54a;
+  outline-offset: 2px;
+}

@@ -21,8 +21,8 @@ const schema = z.object({
  * Null when either value is missing or malformed. A game against the bots needs neither: it
  * is played and kept on the device, and an account is only ever extra. So a build without
  * them plays as before, and a throw here would take the whole page down instead (Nordle's
- * env.ts did, until its NORD-17; Hanora's is the same as this). Nothing imports the client
- * yet; the first screen that does checks this first.
+ * env.ts did, until its NORD-17; Hanora's is the same as this). App checks this before it
+ * offers the Account button, the one way the client is loaded (KUB-29).
  */
 export const env: z.infer<typeof schema> | null = configured();
 
