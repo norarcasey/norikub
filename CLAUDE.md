@@ -55,6 +55,9 @@ apps/web          Vite + React SPA over it
 apps/web/pwa.config.ts, apps/web/src/pwa/
                   installable: the manifest, the service worker's rules, the stale-chunk
                   reload, the iOS shell
+apps/web/src/device/
+                  what is kept on this device, and for whom: the game in progress, in
+                  IndexedDB with a localStorage journal for the put a reload cuts short
 apps/mac          the Mac app: a native window onto the same apps/web build. Swift, built by
                   `pnpm app:install`, never by the gate or CI. `shell/App.swift` is the one
                   file the app edits

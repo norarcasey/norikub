@@ -20,7 +20,7 @@ export function takeFromPile(pile: Pile, at: number): Pile {
 
 /**
  * The pile for a pool of `size`: this one if it fits, otherwise a fresh deal. A pile only fails
- * to fit after the spots were lost, as on a reload before KUB-6 saves them.
+ * to fit after the spots were lost, as in a game saved without them or by an older build.
  */
 export function fitPile(pile: Pile | undefined, size: number): Pile {
   return pile?.length === size ? pile : dealPile(size);

@@ -29,8 +29,8 @@ export type Note =
 /**
  * The screen's whole state: the game, the person's turn in progress over it (none once the
  * game is over), how they have arranged their rack, and what to tell them. `startRows` is the
- * rack as the turn began, so a take-back puts tiles back where they were. Saving it across a
- * reload is KUB-6's, not this.
+ * rack as the turn began, so a take-back puts tiles back where they were. What of it is saved
+ * across a reload, and how it is read back, is `saved.ts` (KUB-6).
  *
  * `replay` is the bot turns played since the person's last action, as frames to watch. It is
  * only something to look at: `game` is already the game those turns produced, so the state

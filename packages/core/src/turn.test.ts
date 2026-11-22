@@ -4,7 +4,7 @@ import { layout, ts } from './fixtures.test-helpers.ts';
 import { finish, gameSchema } from './game.ts';
 import type { Game } from './game.ts';
 import { parse } from './parse.ts';
-import { drawInstead, endTurn, move, startTurn, takeBack } from './turn.ts';
+import { drawInstead, endTurn, move, resumeTurn, startTurn, takeBack } from './turn.ts';
 import type { Move, Turn } from './turn.ts';
 
 /** Plays moves that must all be accepted; a refusal fails the test where it happened. */
@@ -392,5 +392,40 @@ describe('drawing instead of playing', () => {
     expect(result.game.table).toEqual(game.table);
     expect(result.game.players[0]?.rack).toEqual([...ts('red-13-a', 'blue-13-a'), result.drawn]);
     expect(result.game.current).toBe(1);
+  });
+});
+
+describe('a turn read back after a reload', () => {
+  const game = layout(
+    [{ rack: ['red-7-a', 'red-8-a', 'blue-1-a'], hasMelded: true }, { rack: ['black-1-a'] }],
+    [['red-4-a', 'red-5-a', 'red-6-a']],
+  );
+
+  it('is the turn that was saved, over the game it began from', () => {
+    const played = play(startTurn(game), toSet('red-7-a', 0), toNew('red-6-a'));
+    expect(resumeTurn(game, played.rack, played.table)).toEqual(played);
+  });
+
+  it('is refused once the game is over', () => {
+    const over = finish(game, 1, 'rack-emptied');
+    expect(resumeTurn(over, over.players[0]?.rack ?? [], over.table)).toBeNull();
+  });
+
+  it('is refused when a tile is missing, doubled or from elsewhere', () => {
+    const { rack, table } = startTurn(game);
+    expect(resumeTurn(game, rack.slice(1), table)).toBeNull();
+    expect(resumeTurn(game, [...rack.slice(1), ...ts('red-8-a')], table)).toBeNull();
+    expect(resumeTurn(game, [...rack.slice(1), ...ts('black-1-a')], table)).toBeNull();
+  });
+
+  it('is refused with a table tile in the rack, which no move allows', () => {
+    expect(
+      resumeTurn(game, ts('red-7-a', 'red-8-a', 'blue-1-a', 'red-6-a'), [ts('red-4-a', 'red-5-a')]),
+    ).toBeNull();
+  });
+
+  it('is refused with an empty set, which no move leaves', () => {
+    const { rack, table } = startTurn(game);
+    expect(resumeTurn(game, rack, [...table, []])).toBeNull();
   });
 });

@@ -5,17 +5,33 @@ import { GameScreen } from './table/GameScreen.tsx';
 import { newSession } from './table/session.ts';
 import type { Session } from './table/session.ts';
 
-/** A test passes `seed` to play a known deal; otherwise each load deals a new one. */
-export function App({ seed }: { seed?: number }) {
-  const [session, setSession] = useState<Session>(() => newSession(seed ?? Date.now()));
+/**
+ * `initial` is the game to show first: the one resumed from the device, or a new deal. A test
+ * passes `seed` instead to play a known deal. `onSave` is handed every session before it is
+ * shown (invariant 3), so the state on the device is never behind the screen.
+ */
+export function App({
+  initial,
+  seed,
+  onSave = () => {},
+}: {
+  initial?: Session;
+  seed?: number;
+  onSave?: (session: Session) => void;
+}) {
+  const [session, setSession] = useState<Session>(() => initial ?? newSession(seed ?? Date.now()));
+  const change = (next: Session) => {
+    onSave(next);
+    setSession(next);
+  };
   return (
     <main>
       <UpdateNotice />
       <h1 className="visually-hidden">Norikub</h1>
       <GameScreen
         session={session}
-        onChange={setSession}
-        onNewGame={() => setSession(newSession(Date.now()))}
+        onChange={change}
+        onNewGame={() => change(newSession(Date.now()))}
       />
     </main>
   );

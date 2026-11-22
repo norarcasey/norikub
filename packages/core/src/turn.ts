@@ -164,3 +164,27 @@ function setKey(set: readonly Tile[]): string {
     .sort()
     .join(',');
 }
+
+/**
+ * A turn read back after a reload (invariant 3): the working rack and table that were saved,
+ * over the game the turn began from. Null when they cannot be that turn: the game is over, or
+ * the tiles are not exactly the ones the seat's rack and the table held when it began, or a
+ * tile that began on the table is in the rack, which `move` never allows. Saved state is
+ * whatever was on disk, so it is judged as strictly as a move is, never trusted for having
+ * once been written by this code.
+ */
+export function resumeTurn(
+  start: Game,
+  rack: readonly Tile[],
+  table: readonly (readonly Tile[])[],
+): Turn | null {
+  if (start.status.kind !== 'playing') return null;
+  const began = startTurn(start);
+  const ids = (tiles: readonly Tile[]): string[] => tiles.map((tile) => tile.id).sort();
+  const had = ids([...began.rack, ...began.table.flat()]);
+  const has = ids([...rack, ...table.flat()]);
+  if (had.length !== has.length || had.some((id, i) => id !== has[i])) return null;
+  if (rack.some((tile) => beganOnTable(began, tile.id))) return null;
+  if (table.some((set) => set.length === 0)) return null;
+  return { ...began, rack, table };
+}
