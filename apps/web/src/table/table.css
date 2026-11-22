@@ -244,6 +244,13 @@ body {
     0 0 0 2px var(--ok);
 }
 
+/* The opponent whose turn is playing back. */
+.opponents li[data-playing] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
 .tile[data-selected] {
   transform: translateY(-4px);
   box-shadow:

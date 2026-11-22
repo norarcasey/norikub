@@ -7,6 +7,8 @@ import type { Move, MoveRefusal, Turn, TurnFault } from '@norikub/core/turn';
 
 import { dealRows, placeOnRack, reconcileRows } from './rack.ts';
 import type { RackRows } from './rack.ts';
+import { framesOf } from './replay.ts';
+import type { Frame } from './replay.ts';
 
 /** The seat the person plays from; the other seats are bots. */
 export const PERSON = 0;
@@ -27,6 +29,12 @@ export type Note =
  * game is over), how they have arranged their rack, and what to tell them. `startRows` is the
  * rack as the turn began, so a take-back puts tiles back where they were. Saving it across a
  * reload is KUB-6's, not this.
+ *
+ * `replay` is the bot turns played since the person's last action, as frames to watch. It is
+ * only something to look at: `game` is already the game those turns produced, so the state
+ * worth saving is whole before the playback starts (invariant 3), and a reload part-way
+ * through resumes at the person's turn rather than playing a bot turn twice. It is never
+ * saved.
  */
 export type Session = {
   readonly game: Game;
@@ -34,6 +42,7 @@ export type Session = {
   readonly rows: RackRows;
   readonly startRows: RackRows;
   readonly notes: readonly Note[];
+  readonly replay: readonly Frame[];
 };
 
 /** Where on the rack a tile is let go: a row, and the place along it. */
@@ -58,24 +67,31 @@ export function fromGame(game: Game, notes: readonly Note[], rows?: RackRows): S
     rows: laidOut,
     startRows: laidOut,
     notes: [...notes, ...played.notes],
+    replay: played.frames,
   };
 }
 
-/** The bots take their turns, instantly, until it is the person's turn or the game is over. */
-function playBots(game: Game): { game: Game; notes: Note[] } {
+/**
+ * The bots take their turns until it is the person's turn or the game is over. They decide at
+ * once; the frames are how the screen shows it afterwards, at a pace a person can follow.
+ */
+function playBots(game: Game): { game: Game; notes: Note[]; frames: Frame[] } {
   const notes: Note[] = [];
+  const frames: Frame[] = [];
   let current = game;
   while (current.status.kind === 'playing' && current.current !== PERSON) {
     const seat = current.current;
     const before = current.players[seat]?.rack.length ?? 0;
-    const next = takeBotTurn(current).game;
+    const result = takeBotTurn(current);
+    frames.push(...framesOf(current, result));
+    const next = result.game;
     const after = next.players[seat]?.rack.length ?? 0;
     // A bot that draws ends with one tile more, and has played none.
     const played = Math.max(0, before - after);
     notes.push({ kind: 'bot', name: current.players[seat]?.name ?? '', played });
     current = next;
   }
-  return { game: current, notes };
+  return { game: current, notes, frames };
 }
 
 /** What the engine would say to a move, without making it: used while a tile is dragged. */

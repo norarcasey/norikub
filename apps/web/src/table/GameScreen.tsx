@@ -6,7 +6,8 @@ import type { Tile } from '@norikub/core/tiles';
 
 import { dropAttribute, toMove, useDrag } from './drag.ts';
 import type { Drag, DropTarget } from './drag.ts';
-import { noteText, refusalText, tileName } from './messages.ts';
+import { frameText, noteText, refusalText, tileName } from './messages.ts';
+import { usePlayback } from './playback.ts';
 import { PERSON, drawTile, finishTurn, moveTile, probe, undoTurn } from './session.ts';
 import type { Session } from './session.ts';
 import './table.css';
@@ -147,6 +148,11 @@ export function GameScreen({
 }) {
   const { game, turn, notes, rows } = session;
   const [selected, setSelected] = useState<string | null>(null);
+  // While a bot's turn plays back, the screen shows the frame and takes no moves: the game
+  // underneath is already at the person's turn, and a move made now would be made on a table
+  // they cannot see.
+  const playback = usePlayback(session.replay);
+  const watching = playback.frame;
 
   const place = useCallback(
     (tileId: string, target: DropTarget) => {
@@ -159,7 +165,7 @@ export function GameScreen({
 
   const drag = useDrag({ onDrop: place });
 
-  const events: TileEvents = {
+  const live: TileEvents = {
     onPointerDown: drag.onPointerDown,
     onPointerMove: drag.onPointerMove,
     onPointerUp: drag.onPointerUp,
@@ -169,11 +175,12 @@ export function GameScreen({
       setSelected((current) => (current === tileId ? null : tileId));
     },
   };
+  const events = watching === null ? live : INERT;
 
   // Tap a tile, then tap where it goes: the same moves as a drag, for a keyboard or a hand
   // that would rather not drag.
   const tapTarget = (target: DropTarget) => () => {
-    if (selected !== null) place(selected, target);
+    if (watching === null && selected !== null) place(selected, target);
   };
 
   // While a tile is in flight the engine is asked what it would say to letting go here, so a
@@ -193,7 +200,7 @@ export function GameScreen({
       note.kind === 'fault' && note.fault.kind === 'invalid-set' ? [note.fault.set] : [],
     ),
   );
-  const table = turn?.table ?? game.table;
+  const table = watching?.table ?? turn?.table ?? game.table;
   const rack = turn?.rack ?? game.players[PERSON]?.rack ?? [];
   const byId = new Map(rack.map((tile) => [tile.id, tile]));
   const lifted = drag.drag?.tileId ?? null;
@@ -203,11 +210,23 @@ export function GameScreen({
     events,
     lifted: tile.id === lifted,
     selected: tile.id === selected,
-    fresh: onTable && turn !== null && !startIds.has(tile.id),
+    fresh:
+      watching === null
+        ? onTable && turn !== null && !startIds.has(tile.id)
+        : watching.step.kind === 'placed' && watching.step.tile.id === tile.id,
   });
 
   const opponents = game.players.flatMap((player, seat) =>
-    seat === PERSON ? [] : [{ seat, name: player.name, count: player.rack.length }],
+    seat === PERSON
+      ? []
+      : [
+          {
+            seat,
+            name: player.name,
+            count: watching?.counts[seat] ?? player.rack.length,
+            playing: watching?.seat === seat,
+          },
+        ],
   );
   const status = game.status;
 
@@ -216,12 +235,12 @@ export function GameScreen({
       <header className="game-bar">
         <ul className="opponents" aria-label="Opponents">
           {opponents.map((o) => (
-            <li key={o.seat}>
+            <li key={o.seat} data-playing={o.playing || undefined}>
               {o.name}: {o.count} tiles
             </li>
           ))}
         </ul>
-        <span>Pool: {game.pool.length}</span>
+        <span>Pool: {watching?.pool ?? game.pool.length}</span>
       </header>
 
       <section className="table" aria-label="Table">
@@ -246,7 +265,7 @@ export function GameScreen({
             </div>
           );
         })}
-        {turn !== null && (
+        {turn !== null && watching === null && (
           <div
             className="set new-set"
             role="button"
@@ -260,7 +279,7 @@ export function GameScreen({
         )}
       </section>
 
-      {status.kind === 'playing' && game.pool.length > 0 && (
+      {watching === null && status.kind === 'playing' && game.pool.length > 0 && (
         // Face down, as at a real table: the buttons carry their place in the pool and nothing
         // else, so the page itself never says what a tile is before it is drawn.
         <section className="pool" aria-label="Face-down tiles: pick one to draw">
@@ -277,12 +296,20 @@ export function GameScreen({
       )}
 
       <p className="notes" role="status">
-        {drag.drag !== null && refusal !== null
-          ? refusalText(refusal)
-          : notes.map(noteText).join(' ')}
+        {watching !== null
+          ? frameText(watching)
+          : drag.drag !== null && refusal !== null
+            ? refusalText(refusal)
+            : notes.map(noteText).join(' ')}
       </p>
 
-      {status.kind === 'over' ? (
+      {watching !== null ? (
+        <div className="actions">
+          <button type="button" onClick={playback.skip}>
+            Skip
+          </button>
+        </div>
+      ) : status.kind === 'over' ? (
         <p className="over">
           {status.winner === PERSON ? 'You won.' : `${game.players[status.winner]?.name} won.`}
         </p>
@@ -328,6 +355,14 @@ export function GameScreen({
     </div>
   );
 }
+
+const INERT: TileEvents = {
+  onPointerDown: () => {},
+  onPointerMove: () => {},
+  onPointerUp: () => {},
+  onPointerCancel: () => {},
+  onTap: () => {},
+};
 
 function findTile(
   drag: Drag,

@@ -1,6 +1,7 @@
 import type { Tile } from '@norikub/core/tiles';
 import type { MoveRefusal, TurnFault } from '@norikub/core/turn';
 
+import type { Frame } from './replay.ts';
 import type { Note } from './session.ts';
 
 export function tileName(tile: Tile): string {
@@ -48,5 +49,16 @@ export function noteText(note: Note): string {
       return note.played === 0
         ? `${note.name} drew a tile.`
         : `${note.name} played ${note.played} tile${note.played === 1 ? '' : 's'}.`;
+  }
+}
+
+export function frameText(frame: Frame): string {
+  switch (frame.step.kind) {
+    case 'placed':
+      return `${frame.name} plays the ${tileName(frame.step.tile)}.`;
+    case 'drew':
+      return `${frame.name} draws a tile.`;
+    case 'done':
+      return `${frame.name} played ${frame.step.played} tile${frame.step.played === 1 ? '' : 's'}.`;
   }
 }
