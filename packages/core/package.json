@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./bot": "./src/bot.ts",
     "./game": "./src/game.ts",
     "./parse": "./src/parse.ts",
     "./random": "./src/random.ts",
