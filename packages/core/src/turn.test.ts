@@ -4,7 +4,7 @@ import { layout, ts } from './fixtures.test-helpers.ts';
 import { finish, gameSchema } from './game.ts';
 import type { Game } from './game.ts';
 import { parse } from './parse.ts';
-import { endTurn, move, startTurn, takeBack } from './turn.ts';
+import { drawInstead, endTurn, move, startTurn, takeBack } from './turn.ts';
 import type { Move, Turn } from './turn.ts';
 
 /** Plays moves that must all be accepted; a refusal fails the test where it happened. */
@@ -321,5 +321,20 @@ describe('taking the turn back', () => {
     expect(back).toEqual(start);
     expect(back.table).toEqual(game.table);
     expect(back.rack).toEqual(game.players[0]?.rack);
+  });
+});
+
+describe('drawing instead of playing', () => {
+  it('takes back what was moved, then draws', () => {
+    const game = layout(
+      [{ rack: ['red-13-a', 'blue-13-a'], hasMelded: true }, { rack: ['black-1-a'] }],
+      [['orange-10-a', 'orange-11-a', 'orange-12-a', 'orange-13-a']],
+    );
+    const messy = play(startTurn(game), toNew('red-13-a'), toSet('orange-13-a', 1));
+    const result = drawInstead(messy);
+    if (!result.ok) throw new Error(result.refusal);
+    expect(result.game.table).toEqual(game.table);
+    expect(result.game.players[0]?.rack).toEqual([...ts('red-13-a', 'blue-13-a'), result.drawn]);
+    expect(result.game.current).toBe(1);
   });
 });

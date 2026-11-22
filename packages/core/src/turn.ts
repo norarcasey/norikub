@@ -1,5 +1,5 @@
-import { FIRST_MELD_POINTS, finish, nextSeat } from './game.ts';
-import type { Game } from './game.ts';
+import { FIRST_MELD_POINTS, draw, finish, nextSeat } from './game.ts';
+import type { DrawResult, Game } from './game.ts';
 import { judgeSet } from './sets.ts';
 import type { Tile } from './tiles.ts';
 
@@ -47,6 +47,15 @@ export function startTurn(game: Game): Turn {
 /** Taking the turn back: the table and the rack exactly as they were when it began. */
 export function takeBack(turn: Turn): Turn {
   return startTurn(turn.start);
+}
+
+/**
+ * Drawing instead of playing, from part-way through a turn. A draw plays no tile, so whatever
+ * was moved goes back first: the next player finds the table this turn began with, not a
+ * half-reworked one that nobody judged.
+ */
+export function drawInstead(turn: Turn): DrawResult {
+  return draw(turn.start);
 }
 
 export function move(turn: Turn, m: Move): MoveResult {
