@@ -6,6 +6,7 @@ import type { Game, Status } from '@norikub/core/game';
 import { rackPenalty } from '@norikub/core/tiles';
 import type { Tile } from '@norikub/core/tiles';
 
+import { ANIMALS, NoraJoker } from './art.tsx';
 import { dropAttribute, ghostTransform, toMove, useDrag } from './drag.ts';
 import type { Drag, DropTarget } from './drag.ts';
 import {
@@ -36,24 +37,22 @@ type TileEvents = {
   readonly onTap: (tileId: string) => void;
 };
 
-// A shape beside each colour, so the tiles can be told apart without telling the colours
-// apart.
-const MARKS = { red: '●', blue: '■', orange: '▲', black: '◆' } as const;
-
+// The animal under the numeral is the colour's mark, so the tiles can be told apart without
+// telling the colours apart (art.tsx).
 function TileFace({ tile }: { tile: Tile }) {
   if (tile.kind === 'joker') {
     return (
-      <>
-        <span className="tile-value">★</span>
-        <span className="tile-mark">joker</span>
-      </>
+      <span className="tile-joker">
+        <NoraJoker />
+      </span>
     );
   }
+  const Face = ANIMALS[tile.colour];
   return (
     <>
       <span className="tile-value">{tile.value}</span>
-      <span className="tile-mark" aria-hidden="true">
-        {MARKS[tile.colour]}
+      <span className="tile-mark">
+        <Face />
       </span>
     </>
   );

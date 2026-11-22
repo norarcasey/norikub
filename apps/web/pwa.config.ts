@@ -11,11 +11,12 @@ import { VitePWA } from 'vite-plugin-pwa';
  */
 
 /**
- * The app's colours in the install banner, the splash screen and the status bar. A design
- * decision, made in the app — these are placeholders, not a palette.
+ * The app's colours in the install banner, the splash screen and the status bar: the table's
+ * felt edge, `--felt-edge` in `src/table/table.css` (KUB-7), so the bars run into the table
+ * rather than framing it in white.
  */
-const THEME_COLOUR = '#ffffff';
-const BACKGROUND_COLOUR = '#ffffff';
+const THEME_COLOUR = '#234a47';
+const BACKGROUND_COLOUR = '#234a47';
 
 /**
  * The tile colour of `public/favicon.svg`, and it changes with the mark. The preset pads the
@@ -25,7 +26,7 @@ const BACKGROUND_COLOUR = '#ffffff';
  * the padding disappears into it; the apple icon also drops its padding, because iOS rounds the
  * corners itself and a mark shrunk inside that looks like a mistake.
  */
-const TILE_COLOUR = '#1f2937';
+const TILE_COLOUR = '#f6cdb0';
 
 /**
  * Which build this is, as `import.meta.env.VITE_BUILD`. Read through `src/build.ts`.

@@ -1,17 +1,18 @@
 /*
- * The table screen. Norikub's own look: cream tiles on a deep green-blue felt, a numeral and a
- * shape per colour.
+ * The table screen. Norikub's own look (KUB-7): warm cream tiles on a soft sea-green felt, a
+ * numeral and an animal per colour (art.tsx), the owl on every tile's back and Nora as the
+ * joker. The inks are the animals' own colours, darkened until the numeral reads on the cream.
  */
 :root {
-  --felt: #17423f;
-  --felt-edge: #0f2e2c;
-  --tile: #fbf5e6;
-  --tile-edge: #d9ccad;
-  --ink-red: #c8323b;
-  --ink-blue: #2357b5;
-  --ink-orange: #d27a12;
-  --ink-black: #222;
-  --ink-joker: #7a3fb0;
+  --felt: #2e5e5a;
+  --felt-edge: #234a47;
+  --tile: #fff7ea;
+  --tile-edge: #e6cfb4;
+  --ink-red: #c2412b;
+  --ink-blue: #2c64a8;
+  --ink-orange: #a8700a;
+  --ink-black: #26262e;
+  --ink-joker: #a9532a;
   --ok: #7ed7a5;
   --bad: #ff8a80;
   --text: #f3efe4;
@@ -281,13 +282,13 @@ body {
   gap: 6px;
   padding: 8px;
   border-radius: 12px;
-  background: #5a3b22;
+  background: #7a4e2d;
 }
 
 /* One tier of the rack: a ledge of slots the tiles stand in. */
 .rack-row {
   display: grid;
-  border-bottom: 3px solid #3d2716;
+  border-bottom: 3px solid #55341c;
 }
 
 /*
@@ -318,11 +319,11 @@ body {
 }
 
 .rack-slot .tile-value {
-  font-size: 50cqi;
+  font-size: 46cqi;
 }
 
 .rack-slot .tile-mark {
-  font-size: 22cqi;
+  width: 56cqi;
 }
 
 /*
@@ -348,11 +349,9 @@ body {
   height: var(--back-h);
   padding: 0;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.45);
-  border: 1px solid #0c2523;
+  border: 1px solid #1a3a37;
   border-radius: 3px;
-  background:
-    radial-gradient(circle at 50% 50%, #e9c46a 0 2px, transparent 3px),
-    linear-gradient(160deg, #2b6b64, #1d4f4a);
+  background: url('/tile-back.svg') center / cover;
   cursor: pointer;
 }
 
@@ -393,9 +392,7 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background:
-    radial-gradient(circle at 50% 50%, #e9c46a 0 12%, transparent 16%),
-    linear-gradient(160deg, #2b6b64, #1d4f4a);
+  background: url('/tile-back.svg') center / cover;
 }
 
 .tile {
@@ -424,14 +421,30 @@ body {
 }
 
 .tile-value {
-  font-size: calc(var(--tile-w) * 0.5);
-  font-weight: 700;
+  font-size: calc(var(--tile-w) * 0.46);
+  font-weight: 800;
   line-height: 1;
 }
 
+/* The animal: most of the tile's width, so its outline is what tells the colours apart. */
 .tile-mark {
-  font-size: calc(var(--tile-w) * 0.22);
-  line-height: 1.2;
+  display: block;
+  width: calc(var(--tile-w) * 0.56);
+  aspect-ratio: 1;
+  margin-top: 4%;
+}
+
+/* Nora fills the joker. */
+.tile-joker {
+  display: block;
+  width: 92%;
+  aspect-ratio: 1;
+}
+
+.tile-art {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .tile[data-colour='red'] {
