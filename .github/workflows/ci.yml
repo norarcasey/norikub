@@ -16,9 +16,8 @@ jobs:
     concurrency:
       group: gate-${{ github.ref }}
       cancel-in-progress: true
-    # The scaffold as cut: gate 6.2s and build 0.7s on an M3 Max with a warm store (median of
-    # three, 23 Sep 2026). Ten minutes is headroom for a cold two-core runner, not a
-    # prediction of one. Replace this with the first real CI number, and revisit it as the
+    # First real run on GitHub's runner: the gate job, build included, 31 s (21 Nov 2026,
+    # the scaffold as cut). Ten minutes is headroom, not a prediction. Revisit it as the
     # suite grows — a cap that was right in week one and wrong by month three kills a run,
     # and a killed gate skips the deploy behind it.
     timeout-minutes: 10
