@@ -115,6 +115,25 @@ describe('drawing', () => {
     expect(drawn(same).status).toMatchObject({ winner: 0 });
   });
 
+  it('takes the face-down tile the player picked, and only that one', () => {
+    const game = newGame({ names, seed: 9 });
+    const result = draw(game, 5);
+    if (!result.ok) throw new Error(result.refusal);
+    expect(result.drawn).toEqual(game.pool[5]);
+    expect(result.game.pool).toEqual(game.pool.filter((_, i) => i !== 5));
+    expect(result.game.players[0]?.rack.at(-1)).toEqual(game.pool[5]);
+    expect(parse(gameSchema, result.game).ok).toBe(true);
+  });
+
+  it('refuses a pick that is not a tile in the pool', () => {
+    const game = newGame({ names, seed: 9 });
+    for (const pick of [-1, game.pool.length, 1.5]) {
+      expect(draw(game, pick)).toEqual({ ok: false, refusal: 'no-such-tile' });
+    }
+    const empty: Game = { ...layout([{ rack: ['red-9-a'] }, { rack: ['red-2-a'] }]), pool: [] };
+    expect(draw(empty, 0)).toEqual({ ok: false, refusal: 'no-such-tile' });
+  });
+
   it('is refused once the game is over', () => {
     const over = finish(layout([{ rack: [] }, { rack: ['red-1-a'] }]), 0, 'rack-emptied');
     expect(draw(over)).toEqual({ ok: false, refusal: 'game-over' });

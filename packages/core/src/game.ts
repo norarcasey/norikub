@@ -83,28 +83,40 @@ export function newGame({ names, seed }: NewGame): Game {
 
 export type DrawResult =
   | { readonly ok: true; readonly game: Game; readonly drawn: Tile | null }
-  | { readonly ok: false; readonly refusal: 'game-over' };
+  | { readonly ok: false; readonly refusal: 'game-over' | 'no-such-tile' };
 
 /**
  * The alternative to playing: take one tile from the pool and pass the turn. With the pool
  * empty it is a pass, and once every player has passed in a row nobody can play, so the game
  * ends on the lowest rack.
+ *
+ * `pick` is the face-down tile a person chose, by its place in the pool, as at a real table
+ * where the tiles lie spread out and a player takes the one they reach for. The pool is
+ * shuffled, so a pick is as blind as the last tile, which is what a bot takes.
  */
-export function draw(game: Game): DrawResult {
+export function draw(game: Game, pick?: number): DrawResult {
   if (game.status.kind !== 'playing') return { ok: false, refusal: 'game-over' };
-  const drawn = game.pool.at(-1);
-  if (drawn === undefined) {
+  if (pick === undefined && game.pool.length === 0) {
     const passes = game.passes + 1;
     const next = { ...game, passes, current: nextSeat(game) };
     if (passes < game.players.length) return { ok: true, game: next, drawn: null };
     return { ok: true, game: finish(next, lowestRack(next), 'pool-exhausted'), drawn: null };
   }
+  const at = pick ?? game.pool.length - 1;
+  const drawn = game.pool[at];
+  if (drawn === undefined) return { ok: false, refusal: 'no-such-tile' };
   const players = game.players.map((player, seat) =>
     seat === game.current ? { ...player, rack: [...player.rack, drawn] } : player,
   );
   return {
     ok: true,
-    game: { ...game, players, pool: game.pool.slice(0, -1), passes: 0, current: nextSeat(game) },
+    game: {
+      ...game,
+      players,
+      pool: game.pool.filter((_, i) => i !== at),
+      passes: 0,
+      current: nextSeat(game),
+    },
     drawn,
   };
 }

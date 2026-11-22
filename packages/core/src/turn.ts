@@ -54,8 +54,8 @@ export function takeBack(turn: Turn): Turn {
  * was moved goes back first: the next player finds the table this turn began with, not a
  * half-reworked one that nobody judged.
  */
-export function drawInstead(turn: Turn): DrawResult {
-  return draw(turn.start);
+export function drawInstead(turn: Turn, pick?: number): DrawResult {
+  return draw(turn.start, pick);
 }
 
 export function move(turn: Turn, m: Move): MoveResult {
