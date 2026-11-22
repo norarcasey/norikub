@@ -46,7 +46,7 @@ export type Session = {
 };
 
 /** Where on the rack a tile is let go: a row, and the place along it. */
-export type RackSpot = { readonly row: number; readonly index: number };
+export type RackSpot = { readonly row: number; readonly col: number };
 
 export function newSession(seed: number): Session {
   return fromGame(newGame({ names: ['You', 'Bot A', 'Bot B'], seed }), []);
@@ -118,7 +118,7 @@ export function moveTile(session: Session, m: Move, spot?: RackSpot): Session {
     if (spot === undefined) return session;
     return {
       ...session,
-      rows: placeOnRack(session.rows, m.tileId, spot.row, spot.index),
+      rows: placeOnRack(session.rows, m.tileId, spot.row, spot.col),
       notes: [],
     };
   }
@@ -126,7 +126,7 @@ export function moveTile(session: Session, m: Move, spot?: RackSpot): Session {
   if (!result.ok) return { ...session, notes: [{ kind: 'refused', refusal: result.refusal }] };
   let rows = reconcileRows(session.rows, result.turn.rack, session.startRows);
   if (m.kind === 'to-rack' && spot !== undefined) {
-    rows = placeOnRack(rows, m.tileId, spot.row, spot.index);
+    rows = placeOnRack(rows, m.tileId, spot.row, spot.col);
   }
   return { ...session, turn: result.turn, rows, notes: [] };
 }

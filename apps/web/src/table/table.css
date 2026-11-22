@@ -130,7 +130,14 @@ body {
   font-weight: 600;
 }
 
+/*
+ * As wide as its slots and no wider, in front of the player: rack wood past the last column
+ * would look like somewhere a tile could go, and a drop there finds no slot.
+ */
 .rack {
+  align-self: center;
+  max-width: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -139,32 +146,45 @@ body {
   background: #5a3b22;
 }
 
-/*
- * One tier of the rack: a ledge the tiles stand on. A row too long for the screen scrolls
- * sideways rather than wrapping, because a wrapped row would read as a fourth tier.
- */
+/* One tier of the rack: a ledge of slots the tiles stand in. */
 .rack-row {
-  display: flex;
-  gap: 4px;
-  min-height: calc(var(--tile-w) * 1.4);
-  padding: 2px 4px 4px;
-  border: 2px solid transparent;
+  display: grid;
   border-bottom: 3px solid #3d2716;
-  border-radius: 6px;
-  overflow-x: auto;
 }
 
 /*
- * Where a held tile will land. Its negative margins cancel its own width and one gap, so
- * showing it does not shift the tiles it sits between: a shifting row would move the place
- * under a still finger.
+ * A slot is a tile's place, filled or not. The spacing is padding inside it, so neighbouring
+ * slots touch and the finger is always over one of them. Its size comes from the row's
+ * columns; the tile in it is sized from the slot (container units), not from the screen.
  */
-.rack-marker {
-  flex: none;
-  width: 4px;
-  margin: 0 -4px;
-  border-radius: 2px;
-  background: #ffd54a;
+.rack-slot {
+  container-type: inline-size;
+  aspect-ratio: 5 / 7;
+  padding: 2px;
+  border-radius: 6px;
+}
+
+.rack-slot[data-zone='over'] {
+  background: rgb(255 213 74 / 0.35);
+  box-shadow: inset 0 0 0 2px #ffd54a;
+}
+
+.rack-slot[data-zone='refused'] {
+  background: rgb(255 138 128 / 0.3);
+  box-shadow: inset 0 0 0 2px var(--bad);
+}
+
+.rack-slot .tile {
+  width: 100%;
+  height: 100%;
+}
+
+.rack-slot .tile-value {
+  font-size: 50cqi;
+}
+
+.rack-slot .tile-mark {
+  font-size: 22cqi;
 }
 
 .pool {

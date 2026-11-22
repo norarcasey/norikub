@@ -41,6 +41,13 @@ function RunHarness() {
   return <GameScreen session={session} onChange={setSession} />;
 }
 
+/** One slot of the rack, by row and column from 0. */
+function slotAt(row: number, col: number): HTMLElement {
+  const slot = document.querySelector<HTMLElement>(`[data-drop="rack-${row}-${col}"]`);
+  if (slot === null) throw new Error(`no rack slot ${row}-${col}`);
+  return slot;
+}
+
 const rack = () => within(screen.getByRole('region', { name: 'Your rack' }));
 const newSetZone = () => screen.getByText('New set');
 
@@ -89,11 +96,10 @@ describe('the table screen', () => {
     render(<Harness />);
     const set = screen.getByRole('group', { name: 'Set 1' });
     const tile = within(set).getByRole('button', { name: 'orange 13' });
-    const row = screen.getByRole('group', { name: 'Rack row 1' });
-    dragTile(tile, row, false);
+    const slot = slotAt(0, 3);
+    dragTile(tile, slot, false);
     expect(screen.getByRole('status').textContent).toMatch(/stays on the table/);
-    expect(row.dataset.zone).toBe('refused');
-    expect(document.querySelector('.rack-marker')).toBeNull();
+    expect(slot.dataset.zone).toBe('refused');
     fireEvent.pointerUp(tile, { pointerId: 1, clientX: 80, clientY: 90 });
     expect(within(set).getByRole('button', { name: 'orange 13' })).toBeDefined();
   });
@@ -122,18 +128,19 @@ describe('the table screen', () => {
     expect(pool.innerHTML).not.toMatch(/red|blue|orange|black|joker|\d+-[ab]/);
   });
 
-  it('lets the player move a tile along the rack to another row', () => {
+  it('lets the player put a tile in any slot of the rack, gaps and columns included', () => {
     render(<Harness />);
-    const red = rack().getByRole('button', { name: 'red 13' });
-    const row3 = screen.getByRole('group', { name: 'Rack row 3' });
-    dragTile(red, row3);
-    const labels = within(screen.getByRole('group', { name: 'Rack row 3' }))
-      .getAllByRole('button')
-      .map((tile) => tile.getAttribute('aria-label'));
-    expect(labels).toEqual(['black 13', 'red 13']);
+    // Red 13 to row 3, slot 5: across and down, leaving a gap after black 13.
+    dragTile(rack().getByRole('button', { name: 'red 13' }), slotAt(2, 4));
+    expect(slotAt(2, 0).textContent).toContain('13');
+    expect(slotAt(2, 4).querySelector('[aria-label="red 13"]')).not.toBeNull();
+    expect(slotAt(2, 1).childElementCount).toBe(0);
     expect(
       within(screen.getByRole('group', { name: 'Rack row 1' })).queryAllByRole('button'),
     ).toHaveLength(0);
+    // Then blue 13 straight up above it, in the same column.
+    dragTile(rack().getByRole('button', { name: 'blue 13' }), slotAt(1, 4));
+    expect(slotAt(1, 4).querySelector('[aria-label="blue 13"]')).not.toBeNull();
   });
 
   it('shows a run in order, whatever order its tiles were dropped in', () => {

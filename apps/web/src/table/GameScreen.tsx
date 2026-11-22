@@ -93,48 +93,50 @@ type TileProps = {
 };
 
 /**
- * One row of the rack. While a tile is held over it, a mark shows the place it would land,
- * counted among the tiles that stay put, as `targetAt` counts them.
+ * One row of the rack, as slots. Every slot is its own drop target, empty or not, so a tile
+ * lands in exactly the slot under the finger and columns line up across the rows. The slots
+ * touch, with the spacing inside them, so there is no gap between two where a drop finds
+ * nothing.
  */
 function RackRow({
   row,
-  tiles,
-  marker,
-  lifted,
-  zone,
+  slots,
+  byId,
+  zoneOf,
   tileProps,
   onTap,
 }: {
   row: number;
-  tiles: readonly Tile[];
-  marker: number | null;
-  lifted: string | null;
-  zone: string | undefined;
+  slots: readonly (string | null)[];
+  byId: ReadonlyMap<string, Tile>;
+  zoneOf: (target: DropTarget) => string | undefined;
   tileProps: (tile: Tile) => TileProps;
-  onTap: () => void;
+  onTap: (target: DropTarget) => () => void;
 }) {
-  const children = [];
-  let staying = 0;
-  for (const tile of tiles) {
-    if (tile.id !== lifted) {
-      if (staying === marker) children.push(<span key="marker" className="rack-marker" />);
-      staying++;
-    }
-    children.push(<TileButton key={tile.id} {...tileProps(tile)} />);
-  }
-  if (marker !== null && marker >= staying) {
-    children.push(<span key="marker" className="rack-marker" />);
-  }
   return (
     <div
       className="rack-row"
       role="group"
       aria-label={`Rack row ${row + 1}`}
-      data-drop={`rack-${row}`}
-      data-zone={zone}
-      onClick={onTap}
+      // Every row has the same slots, so a column is one width all the way down. A slot is at
+      // most a tile wide and shrinks with the screen, so a rack that has grown still fits.
+      style={{ gridTemplateColumns: `repeat(${slots.length}, minmax(0, 48px))` }}
     >
-      {children}
+      {slots.map((id, col) => {
+        const target: DropTarget = { kind: 'rack', row, col };
+        const tile = id === null ? undefined : byId.get(id);
+        return (
+          <div
+            key={col}
+            className="rack-slot"
+            data-drop={dropAttribute(target)}
+            data-zone={zoneOf(target)}
+            onClick={onTap(target)}
+          >
+            {tile !== undefined && <TileButton {...tileProps(tile)} />}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -157,7 +159,7 @@ export function GameScreen({
   const place = useCallback(
     (tileId: string, target: DropTarget) => {
       setSelected(null);
-      const spot = target.kind === 'rack' ? { row: target.row, index: target.index } : undefined;
+      const spot = target.kind === 'rack' ? { row: target.row, col: target.col } : undefined;
       onChange(moveTile(session, toMove(tileId, target), spot));
     },
     [session, onChange],
@@ -330,25 +332,17 @@ export function GameScreen({
       )}
 
       <section className="rack" aria-label="Your rack">
-        {rows.map((ids, row) => {
-          const tiles = ids.flatMap((id) => {
-            const tile = byId.get(id);
-            return tile === undefined ? [] : [tile];
-          });
-          const over = hovering?.kind === 'rack' && hovering.row === row;
-          return (
-            <RackRow
-              key={row}
-              row={row}
-              tiles={tiles}
-              marker={over && refusal === null ? hovering.index : null}
-              lifted={lifted}
-              zone={over ? (refusal === null ? 'over' : 'refused') : undefined}
-              tileProps={(tile) => tileProps(tile, false)}
-              onTap={tapTarget({ kind: 'rack', row, index: tiles.length })}
-            />
-          );
-        })}
+        {rows.map((slots, row) => (
+          <RackRow
+            key={row}
+            row={row}
+            slots={slots}
+            byId={byId}
+            zoneOf={zoneState}
+            tileProps={(tile) => tileProps(tile, false)}
+            onTap={tapTarget}
+          />
+        ))}
       </section>
 
       {drag.drag !== null && <Ghost drag={drag.drag} tile={findTile(drag.drag, rack, table)} />}
