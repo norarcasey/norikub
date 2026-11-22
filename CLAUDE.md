@@ -2,8 +2,11 @@
 
 A tile rummy game to play online against bots or friends
 
-<!-- APP-01 replaces this comment and the Invariants below: what the app does, who it is for,
-     what it will not do. Write it before any feature. -->
+Norikub plays by the classic tile-rummy rules (runs and groups, a 30-point first meld,
+rearranging the table, jokers) with Nora-branded tiles and art. It is for Nora and her friends:
+first a full game against two bot players, later games against friends online.
+
+The MVP: Nora plays a full game by the core rules against two bot players.
 
 ---
 
@@ -11,27 +14,47 @@ A tile rummy game to play online against bots or friends
 
 The short list. Violating one is a bug even if every test passes. Each says why it exists.
 
-1. _Written in `APP-01`._
-
-- **CI is the only way to production.** Vercel's own deploys of `main` are off in `vercel.json`.
-- **The service worker caches the shell and nothing else.** `runtimeCaching` is empty in
-  `apps/web/pwa.config.ts`, so every data request reaches the network or fails; rows kept for
-  offline are the app's own, in IndexedDB, under an owner. The first runtime route turns this off.
-- **The Mac app decides nothing the web app decides.** It loads `apps/web`; a rule written in
-  Swift is a second copy that a stale bundle keeps enforcing after the page has changed.
+1. **The engine alone decides what is legal.** The table, the bots and, later, other players
+   all go through one rules engine in `packages/core`, and nothing else judges a move. Why: a UI
+   or a bot with its own idea of the rules would disagree with it, and a game would end on a
+   table nobody can agree on.
+2. **A bot never sees a hidden rack or the pool.** A bot is handed exactly what a human in its
+   seat would see: its own rack, the table and the tile counts. Why: a bot that peeks is not a
+   fair opponent, and nobody playing it could ever tell.
+3. **A game survives a reload.** Every state change is saved before it is shown, so a reload,
+   a closed tab or the Mac app quitting resumes the same game at the same turn. Why: the phone
+   kills background tabs, and losing a long game to that is the fastest way to stop playing.
+4. **Rearranging is free until the turn ends.** The tactile feel of moving tiles around is the
+   point of the game. During a turn any tile on the table can be dragged anywhere and sets may
+   be left broken or incomplete on the way — two 13s may start a group while the board is
+   reworked to free the third. The engine judges the table when the turn ends; if it is not
+   legal then, the player keeps rearranging or takes the turn back. Two things are refused at
+   once, because no end of turn can make them legal: a tile that began the turn on the table
+   never goes into a rack, and a joker taken back by replacing it with a valid tile must be
+   played again that same turn.
+5. **CI is the only way to production.** Vercel's own deploys of `main` are off in `vercel.json`.
+6. **The service worker caches the shell and nothing else.** `runtimeCaching` is empty in
+   `apps/web/pwa.config.ts`, so every data request reaches the network or fails; rows kept for
+   offline are the app's own, in IndexedDB, under an owner. The first runtime route turns this off.
+7. **The Mac app decides nothing the web app decides.** It loads `apps/web`; a rule written in
+   Swift is a second copy that a stale bundle keeps enforcing after the page has changed.
 
 ## Non-goals
 
-- _Written in `APP-01`._
+- **Rummikub's name, branding, tile art or look.** Norikub is Nora-branded: its own name, tiles
+  and art. The rules are a genre; the brand is not ours.
+- **Strangers and matchmaking.** It is for Nora and her friends; you play people you invited,
+  and bots, never someone found for you.
+- **A global leaderboard.** Leaderboards will come, between friends only.
 
 ## Shape
 
 ```
 packages/core     framework-free domain: rules, parsing, anything with an opinion
 apps/web          Vite + React SPA over it
-apps/web/pwa.config.ts
-                  installable: the manifest, the service worker's rules,
-apps/web/src/pwa/ the stale-chunk reload, the iOS shell
+apps/web/pwa.config.ts, apps/web/src/pwa/
+                  installable: the manifest, the service worker's rules, the stale-chunk
+                  reload, the iOS shell
 apps/mac          the Mac app: a native window onto the same apps/web build. Swift, built by
                   `pnpm app:install`, never by the gate or CI. `shell/App.swift` is the one
                   file the app edits

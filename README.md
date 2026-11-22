@@ -2,6 +2,10 @@
 
 A tile rummy game to play online against bots or friends
 
+Norikub is a tile rummy game for Nora and her friends, played by the classic rules with its own
+Nora-branded tiles. It starts as a game against two bot players, in the browser, installed on
+the iPhone from Safari and in a Mac window; playing friends online comes later.
+
 ## Develop
 
 Node 24 and pnpm 9 (`corepack enable` picks up the version in `package.json`).
