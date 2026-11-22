@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ts } from './fixtures.test-helpers.ts';
-import { judgeSet } from './sets.ts';
+import { arrangeSet, judgeSet } from './sets.ts';
 
 describe('a run', () => {
   it('is three or more consecutive numbers of one colour', () => {
@@ -126,5 +126,55 @@ describe('a group', () => {
       kind: 'group',
       points: 39,
     });
+  });
+});
+
+describe('the order a set is read in', () => {
+  const ids = (tiles: readonly { id: string }[]) => tiles.map((tile) => tile.id);
+
+  it('lays a run out low to high, whatever order it was dropped in', () => {
+    expect(ids(arrangeSet(ts('red-7-a', 'red-5-a', 'red-6-b')))).toEqual([
+      'red-5-a',
+      'red-6-b',
+      'red-7-a',
+    ]);
+  });
+
+  it('puts a joker in the gap it fills', () => {
+    expect(ids(arrangeSet(ts('joker-a', 'blue-9-a', 'blue-7-a')))).toEqual([
+      'blue-7-a',
+      'joker-a',
+      'blue-9-a',
+    ]);
+  });
+
+  it('puts a spare joker above the run, as it is scored', () => {
+    expect(ids(arrangeSet(ts('joker-b', 'black-4-a', 'black-5-a')))).toEqual([
+      'black-4-a',
+      'black-5-a',
+      'joker-b',
+    ]);
+  });
+
+  it('puts a spare joker below a run that ends at 13', () => {
+    expect(ids(arrangeSet(ts('orange-13-a', 'joker-a', 'orange-12-a')))).toEqual([
+      'joker-a',
+      'orange-12-a',
+      'orange-13-a',
+    ]);
+  });
+
+  it('lays a group out by colour, jokers last', () => {
+    expect(ids(arrangeSet(ts('joker-a', 'black-8-a', 'red-8-a', 'blue-8-b')))).toEqual([
+      'red-8-a',
+      'blue-8-b',
+      'black-8-a',
+      'joker-a',
+    ]);
+  });
+
+  it('leaves a set that is not valid yet in the order it was dropped', () => {
+    const dropped = ts('red-9-a', 'red-3-a', 'blue-1-a');
+    expect(arrangeSet(dropped)).toBe(dropped);
   });
 });

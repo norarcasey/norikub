@@ -1,4 +1,4 @@
-import { isNumber } from './tiles.ts';
+import { COLOURS, isNumber } from './tiles.ts';
 import type { NumberTile, Tile } from './tiles.ts';
 
 export type SetVerdict =
@@ -58,4 +58,37 @@ function groupPoints(numbers: readonly NumberTile[], jokers: number): number | n
   const length = numbers.length + jokers;
   if (length > 4) return null;
   return first.value * length;
+}
+
+/**
+ * A set in the order it is read: a valid run low to high with each joker where the number it
+ * stands for would be, and a valid group by colour with its jokers last. Spare jokers at the
+ * ends go upward first, the reading `judgeSet` scores, so the screen never shows a joker as a
+ * number it was not counted as. A set that is not valid yet keeps its drop order: while the
+ * board is being reworked, tiles should stay where the player put them.
+ */
+export function arrangeSet(tiles: readonly Tile[]): readonly Tile[] {
+  const verdict = judgeSet(tiles);
+  if (!verdict.valid) return tiles;
+  const numbers = tiles.filter(isNumber);
+  const jokers = tiles.filter((tile) => tile.kind === 'joker');
+  if (verdict.kind === 'group') {
+    const byColour = [...numbers].sort(
+      (a, b) => COLOURS.indexOf(a.colour) - COLOURS.indexOf(b.colour),
+    );
+    return [...byColour, ...jokers];
+  }
+  const byValue = new Map(numbers.map((tile) => [tile.value, tile]));
+  const values = numbers.map((tile) => tile.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const spare = jokers.length - (max - min + 1 - numbers.length);
+  const up = Math.min(spare, 13 - max);
+  const out: Tile[] = [];
+  let joker = 0;
+  for (let value = min - (spare - up); value <= max + up; value++) {
+    const tile = byValue.get(value) ?? jokers[joker++];
+    if (tile !== undefined) out.push(tile);
+  }
+  return out;
 }
