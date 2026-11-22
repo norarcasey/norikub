@@ -1,8 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
-import { judgeSet } from '@norikub/core/sets';
-import { COLOURS } from '@norikub/core/tiles';
+import { arrangeSet, judgeSet } from '@norikub/core/sets';
 import type { Tile } from '@norikub/core/tiles';
 
 import { dropAttribute, toMove, useDrag } from './drag.ts';
@@ -84,11 +83,59 @@ function sameTarget(a: DropTarget | null, b: DropTarget): boolean {
   return a !== null && dropAttribute(a) === dropAttribute(b);
 }
 
-/** The rack laid out by colour, then number, jokers last; the order is the screen's own. */
-function sortedRack(rack: readonly Tile[]): Tile[] {
-  const rank = (tile: Tile) =>
-    tile.kind === 'joker' ? 1000 : COLOURS.indexOf(tile.colour) * 100 + tile.value;
-  return [...rack].sort((a, b) => rank(a) - rank(b));
+type TileProps = {
+  tile: Tile;
+  events: TileEvents;
+  lifted: boolean;
+  selected: boolean;
+  fresh: boolean;
+};
+
+/**
+ * One row of the rack. While a tile is held over it, a mark shows the place it would land,
+ * counted among the tiles that stay put, as `targetAt` counts them.
+ */
+function RackRow({
+  row,
+  tiles,
+  marker,
+  lifted,
+  zone,
+  tileProps,
+  onTap,
+}: {
+  row: number;
+  tiles: readonly Tile[];
+  marker: number | null;
+  lifted: string | null;
+  zone: string | undefined;
+  tileProps: (tile: Tile) => TileProps;
+  onTap: () => void;
+}) {
+  const children = [];
+  let staying = 0;
+  for (const tile of tiles) {
+    if (tile.id !== lifted) {
+      if (staying === marker) children.push(<span key="marker" className="rack-marker" />);
+      staying++;
+    }
+    children.push(<TileButton key={tile.id} {...tileProps(tile)} />);
+  }
+  if (marker !== null && marker >= staying) {
+    children.push(<span key="marker" className="rack-marker" />);
+  }
+  return (
+    <div
+      className="rack-row"
+      role="group"
+      aria-label={`Rack row ${row + 1}`}
+      data-drop={`rack-${row}`}
+      data-zone={zone}
+      onClick={onTap}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function GameScreen({
@@ -98,13 +145,14 @@ export function GameScreen({
   session: Session;
   onChange: (next: Session) => void;
 }) {
-  const { game, turn, notes } = session;
+  const { game, turn, notes, rows } = session;
   const [selected, setSelected] = useState<string | null>(null);
 
   const place = useCallback(
     (tileId: string, target: DropTarget) => {
       setSelected(null);
-      onChange(moveTile(session, toMove(tileId, target)));
+      const spot = target.kind === 'rack' ? { row: target.row, index: target.index } : undefined;
+      onChange(moveTile(session, toMove(tileId, target), spot));
     },
     [session, onChange],
   );
@@ -147,9 +195,10 @@ export function GameScreen({
   );
   const table = turn?.table ?? game.table;
   const rack = turn?.rack ?? game.players[PERSON]?.rack ?? [];
+  const byId = new Map(rack.map((tile) => [tile.id, tile]));
   const lifted = drag.drag?.tileId ?? null;
   // A tile on the table that was not there when the turn began came from the rack this turn.
-  const tileProps = (tile: Tile, onTable: boolean) => ({
+  const tileProps = (tile: Tile, onTable: boolean): TileProps => ({
     tile,
     events,
     lifted: tile.id === lifted,
@@ -191,7 +240,7 @@ export function GameScreen({
               data-faulted={invalid.has(index) || undefined}
               onClick={tapTarget(target)}
             >
-              {set.map((tile) => (
+              {arrangeSet(set).map((tile) => (
                 <TileButton key={tile.id} {...tileProps(tile, true)} />
               ))}
             </div>
@@ -211,6 +260,22 @@ export function GameScreen({
         )}
       </section>
 
+      {status.kind === 'playing' && game.pool.length > 0 && (
+        // Face down, as at a real table: the buttons carry their place in the pool and nothing
+        // else, so the page itself never says what a tile is before it is drawn.
+        <section className="pool" aria-label="Face-down tiles: pick one to draw">
+          {game.pool.map((_, pick) => (
+            <button
+              key={pick}
+              type="button"
+              className="face-down"
+              aria-label="Face-down tile"
+              onClick={() => onChange(drawTile(session, pick))}
+            />
+          ))}
+        </section>
+      )}
+
       <p className="notes" role="status">
         {drag.drag !== null && refusal !== null
           ? refusalText(refusal)
@@ -229,22 +294,34 @@ export function GameScreen({
           <button type="button" onClick={() => onChange(undoTurn(session))}>
             Take back
           </button>
-          <button type="button" onClick={() => onChange(drawTile(session))}>
-            Draw
-          </button>
+          {game.pool.length === 0 && (
+            <button type="button" onClick={() => onChange(drawTile(session))}>
+              Pass
+            </button>
+          )}
         </div>
       )}
 
-      <section
-        className="rack"
-        aria-label="Your rack"
-        data-drop="rack"
-        data-zone={zoneState({ kind: 'rack' })}
-        onClick={tapTarget({ kind: 'rack' })}
-      >
-        {sortedRack(rack).map((tile) => (
-          <TileButton key={tile.id} {...tileProps(tile, false)} />
-        ))}
+      <section className="rack" aria-label="Your rack">
+        {rows.map((ids, row) => {
+          const tiles = ids.flatMap((id) => {
+            const tile = byId.get(id);
+            return tile === undefined ? [] : [tile];
+          });
+          const over = hovering?.kind === 'rack' && hovering.row === row;
+          return (
+            <RackRow
+              key={row}
+              row={row}
+              tiles={tiles}
+              marker={over && refusal === null ? hovering.index : null}
+              lifted={lifted}
+              zone={over ? (refusal === null ? 'over' : 'refused') : undefined}
+              tileProps={(tile) => tileProps(tile, false)}
+              onTap={tapTarget({ kind: 'rack', row, index: tiles.length })}
+            />
+          );
+        })}
       </section>
 
       {drag.drag !== null && <Ghost drag={drag.drag} tile={findTile(drag.drag, rack, table)} />}

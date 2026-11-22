@@ -95,4 +95,34 @@ describe('a session', () => {
     expect(next.turn?.rack).toHaveLength(5);
     expect(next.notes[0]?.kind).toBe('drew');
   });
+
+  it('draws the face-down tile picked, onto the shortest rack row', () => {
+    const s = session();
+    const picked = s.game.pool[10];
+    const next = drawTile(s, 10);
+    expect(next.notes[0]).toEqual({ kind: 'drew', tile: picked });
+    expect(next.rows).toEqual([
+      ['red-13-a', 'blue-13-a'],
+      ['black-2-a', 'black-13-a'],
+      [picked?.id],
+    ]);
+  });
+
+  it('rearranges the rack without asking the engine, and keeps it through a take-back', () => {
+    let s = session();
+    s = moveTile(s, { kind: 'to-rack', tileId: 'black-2-a' }, { row: 2, index: 0 });
+    expect(s.turn?.rack).toEqual(session().turn?.rack);
+    expect(s.rows).toEqual([['red-13-a', 'blue-13-a'], ['black-13-a'], ['black-2-a']]);
+    s = moveTile(s, { kind: 'to-new-set', tileId: 'blue-13-a' });
+    expect(s.rows[0]).toEqual(['red-13-a']);
+    s = undoTurn(s);
+    expect(s.rows).toEqual([['red-13-a', 'blue-13-a'], ['black-13-a'], ['black-2-a']]);
+  });
+
+  it('puts a tile played this turn back on the rack where it is dropped', () => {
+    let s = moveTile(session(), { kind: 'to-new-set', tileId: 'red-13-a' });
+    s = moveTile(s, { kind: 'to-rack', tileId: 'red-13-a' }, { row: 2, index: 0 });
+    expect(s.turn?.table).toHaveLength(2);
+    expect(s.rows[2]).toEqual(['red-13-a']);
+  });
 });

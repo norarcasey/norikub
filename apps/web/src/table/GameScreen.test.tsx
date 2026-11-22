@@ -24,6 +24,23 @@ function Harness() {
   return <GameScreen session={session} onChange={setSession} />;
 }
 
+function RunHarness() {
+  const [session, setSession] = useState<Session>(() =>
+    fromGame(
+      layout(
+        [
+          { rack: ['red-7-a', 'red-5-a', 'red-6-a'], hasMelded: true },
+          { rack: ['blue-1-b'] },
+          { rack: ['black-1-b'] },
+        ],
+        [],
+      ),
+      [],
+    ),
+  );
+  return <GameScreen session={session} onChange={setSession} />;
+}
+
 const rack = () => within(screen.getByRole('region', { name: 'Your rack' }));
 const newSetZone = () => screen.getByText('New set');
 
@@ -72,20 +89,64 @@ describe('the table screen', () => {
     render(<Harness />);
     const set = screen.getByRole('group', { name: 'Set 1' });
     const tile = within(set).getByRole('button', { name: 'orange 13' });
-    dragTile(tile, screen.getByRole('region', { name: 'Your rack' }), false);
+    const row = screen.getByRole('group', { name: 'Rack row 1' });
+    dragTile(tile, row, false);
     expect(screen.getByRole('status').textContent).toMatch(/stays on the table/);
-    expect(screen.getByRole('region', { name: 'Your rack' }).dataset.zone).toBe('refused');
+    expect(row.dataset.zone).toBe('refused');
+    expect(document.querySelector('.rack-marker')).toBeNull();
     fireEvent.pointerUp(tile, { pointerId: 1, clientX: 80, clientY: 90 });
     expect(within(set).getByRole('button', { name: 'orange 13' })).toBeDefined();
   });
 
-  it('says why a turn cannot end, and draws instead', () => {
+  it('says why a turn cannot end, and draws the face-down tile picked', () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: 'End turn' }));
     expect(screen.getByRole('status').textContent).toMatch(/Play at least one tile/);
-    fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+    expect(screen.queryByRole('button', { name: 'Draw' })).toBeNull();
+    const faceDown = screen.getAllByRole('button', { name: 'Face-down tile' });
+    const fourth = faceDown[3];
+    if (fourth === undefined) throw new Error('no fourth face-down tile');
+    fireEvent.click(fourth);
     expect(screen.getByRole('status').textContent).toMatch(/You drew the/);
     expect(rack().getAllByRole('button')).toHaveLength(4);
+    // One for the person's pick, then one each for the two bots, which cannot play and draw.
+    expect(screen.getAllByRole('button', { name: 'Face-down tile' })).toHaveLength(
+      faceDown.length - 3,
+    );
+  });
+
+  it('says nothing in the page about what a face-down tile is', () => {
+    render(<Harness />);
+    const pool = screen.getByRole('region', { name: /Face-down tiles/ });
+    expect(pool.innerHTML).not.toMatch(/red|blue|orange|black|joker|\d+-[ab]/);
+  });
+
+  it('lets the player move a tile along the rack to another row', () => {
+    render(<Harness />);
+    const red = rack().getByRole('button', { name: 'red 13' });
+    const row3 = screen.getByRole('group', { name: 'Rack row 3' });
+    dragTile(red, row3);
+    const labels = within(screen.getByRole('group', { name: 'Rack row 3' }))
+      .getAllByRole('button')
+      .map((tile) => tile.getAttribute('aria-label'));
+    expect(labels).toEqual(['black 13', 'red 13']);
+    expect(
+      within(screen.getByRole('group', { name: 'Rack row 1' })).queryAllByRole('button'),
+    ).toHaveLength(0);
+  });
+
+  it('shows a run in order, whatever order its tiles were dropped in', () => {
+    render(<RunHarness />);
+    for (const name of ['red 7', 'red 5', 'red 6']) {
+      fireEvent.click(rack().getByRole('button', { name }));
+      fireEvent.click(screen.queryByRole('group', { name: 'Set 1' }) ?? newSetZone());
+    }
+    const set = screen.getByRole('group', { name: 'Set 1' });
+    expect(
+      within(set)
+        .getAllByRole('button')
+        .map((tile) => tile.getAttribute('aria-label')),
+    ).toEqual(['red 5', 'red 6', 'red 7']);
   });
 
   it('does not treat the click after a drag as a tap', () => {

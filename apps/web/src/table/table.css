@@ -132,13 +132,64 @@ body {
 
 .rack {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  min-height: calc(var(--tile-w) * 1.4 + 16px);
+  flex-direction: column;
+  gap: 6px;
   padding: 8px;
-  border: 2px solid transparent;
   border-radius: 12px;
   background: #5a3b22;
+}
+
+/*
+ * One tier of the rack: a ledge the tiles stand on. A row too long for the screen scrolls
+ * sideways rather than wrapping, because a wrapped row would read as a fourth tier.
+ */
+.rack-row {
+  display: flex;
+  gap: 4px;
+  min-height: calc(var(--tile-w) * 1.4);
+  padding: 2px 4px 4px;
+  border: 2px solid transparent;
+  border-bottom: 3px solid #3d2716;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+/*
+ * Where a held tile will land. Its negative margins cancel its own width and one gap, so
+ * showing it does not shift the tiles it sits between: a shifting row would move the place
+ * under a still finger.
+ */
+.rack-marker {
+  flex: none;
+  width: 4px;
+  margin: 0 -4px;
+  border-radius: 2px;
+  background: #ffd54a;
+}
+
+.pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  max-height: 30dvh;
+  overflow-y: auto;
+}
+
+/* The back of a tile, the same on every one. */
+.face-down {
+  width: 18px;
+  height: 25px;
+  padding: 0;
+  border: 1px solid #0c2523;
+  border-radius: 3px;
+  background:
+    radial-gradient(circle at 50% 50%, #e9c46a 0 2px, transparent 3px),
+    linear-gradient(160deg, #2b6b64, #1d4f4a);
+  cursor: pointer;
+}
+
+.face-down:hover {
+  outline: 2px solid #ffd54a;
 }
 
 .tile {

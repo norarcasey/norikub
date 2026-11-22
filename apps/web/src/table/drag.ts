@@ -11,16 +11,13 @@ import type { Move } from '@norikub/core/turn';
 export type DropTarget =
   | { readonly kind: 'set'; readonly set: number }
   | { readonly kind: 'new-set' }
-  | { readonly kind: 'rack' };
+  | { readonly kind: 'rack'; readonly row: number; readonly index: number };
 
+/** The zone a target lies in, as `data-drop` names it; a rack row's places share one zone. */
 export function dropAttribute(target: DropTarget): string {
-  return target.kind === 'set' ? `set-${target.set}` : target.kind;
-}
-
-export function parseDropAttribute(value: string | null | undefined): DropTarget | null {
-  if (value === 'rack' || value === 'new-set') return { kind: value };
-  const match = /^set-(\d+)$/.exec(value ?? '');
-  return match?.[1] === undefined ? null : { kind: 'set', set: Number(match[1]) };
+  if (target.kind === 'set') return `set-${target.set}`;
+  if (target.kind === 'rack') return `rack-${target.row}`;
+  return target.kind;
 }
 
 export function toMove(tileId: string, target: DropTarget): Move {
@@ -29,9 +26,25 @@ export function toMove(tileId: string, target: DropTarget): Move {
   return { kind: 'to-rack', tileId };
 }
 
+/**
+ * The target under a point. In a rack row it is also the place along the row: before the
+ * first tile whose middle is right of the pointer, counting only the tiles that stay put, so
+ * the index is the one the row will have once the lifted tile has left it.
+ */
 export function targetAt(x: number, y: number): DropTarget | null {
-  const element = document.elementFromPoint(x, y);
-  return parseDropAttribute(element?.closest('[data-drop]')?.getAttribute('data-drop'));
+  const zone = document.elementFromPoint(x, y)?.closest('[data-drop]');
+  const value = zone?.getAttribute('data-drop') ?? '';
+  if (value === 'new-set') return { kind: 'new-set' };
+  const set = /^set-(\d+)$/.exec(value)?.[1];
+  if (set !== undefined) return { kind: 'set', set: Number(set) };
+  const row = /^rack-(\d+)$/.exec(value)?.[1];
+  if (row === undefined || zone === null || zone === undefined) return null;
+  const staying = [...zone.querySelectorAll('.tile:not([data-lifted])')];
+  const after = staying.findIndex((tile) => {
+    const rect = tile.getBoundingClientRect();
+    return rect.left + rect.width / 2 > x;
+  });
+  return { kind: 'rack', row: Number(row), index: after === -1 ? staying.length : after };
 }
 
 /** A tile in flight: where the pointer is, where it grabbed the tile, and what is under it. */
