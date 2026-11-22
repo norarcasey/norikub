@@ -117,10 +117,23 @@ body {
   background: var(--ok);
 }
 
+/*
+ * The status line with the turn's buttons beside it. The text takes what the buttons leave and
+ * wraps there; the buttons keep their own width and never wrap off the row.
+ */
+.turn-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+}
+
 .notes {
-  min-height: 1.4em;
+  flex: 1;
+  min-width: 0;
   margin: 0;
   font-size: 15px;
+  line-height: 1.3;
 }
 
 .over {
@@ -131,18 +144,38 @@ body {
 
 .actions {
   display: flex;
-  gap: 8px;
+  flex-shrink: 0;
+  gap: 6px;
 }
 
+/* Secondary by default: an outline on the felt. End turn alone is filled. */
 .actions button {
-  flex: 1;
-  min-height: 44px;
-  border: 0;
-  border-radius: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1.5px solid rgb(243 239 228 / 0.55);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.actions button.primary {
+  border-color: var(--tile);
   background: var(--tile);
   color: var(--ink-black);
-  font: inherit;
-  font-weight: 600;
+}
+
+.actions button:active {
+  transform: translateY(1px);
+}
+
+.actions button:focus-visible {
+  outline: 2px solid #ffd54a;
+  outline-offset: 2px;
 }
 
 /*

@@ -349,41 +349,45 @@ export function GameScreen({
         />
       )}
 
-      <p className="notes" role="status">
-        {watching !== null
-          ? frameText(watching)
-          : drag.drag !== null && refusal !== null
-            ? refusalText(refusal)
-            : split !== null && held !== undefined
-              ? splitText(held)
-              : notes.map(noteText).join(' ')}
-      </p>
-
-      {watching !== null ? (
-        <div className="actions">
-          <button type="button" onClick={playback.skip}>
-            Skip
-          </button>
-        </div>
-      ) : status.kind === 'over' ? (
-        <p className="over">
-          {status.winner === PERSON ? 'You won.' : `${game.players[status.winner]?.name} won.`}
+      {/* The status line and the actions share a row, so the buttons cost the table and the
+          rack no room of their own (KUB-24). End turn comes last, where the thumb is. */}
+      <div className="turn-bar">
+        <p className="notes" role="status">
+          {watching !== null
+            ? frameText(watching)
+            : drag.drag !== null && refusal !== null
+              ? refusalText(refusal)
+              : split !== null && held !== undefined
+                ? splitText(held)
+                : notes.map(noteText).join(' ')}
         </p>
-      ) : (
-        <div className="actions">
-          <button type="button" onClick={() => onChange(finishTurn(session))}>
-            End turn
-          </button>
-          <button type="button" onClick={() => onChange(undoTurn(session))}>
-            Take back
-          </button>
-          {game.pool.length === 0 && (
-            <button type="button" onClick={() => onChange(drawTile(session))}>
-              Pass
+
+        {watching !== null ? (
+          <div className="actions">
+            <button type="button" onClick={playback.skip}>
+              Skip
             </button>
-          )}
-        </div>
-      )}
+          </div>
+        ) : status.kind === 'over' ? (
+          <p className="over">
+            {status.winner === PERSON ? 'You won.' : `${game.players[status.winner]?.name} won.`}
+          </p>
+        ) : (
+          <div className="actions">
+            <button type="button" onClick={() => onChange(undoTurn(session))}>
+              Take back
+            </button>
+            {game.pool.length === 0 && (
+              <button type="button" onClick={() => onChange(drawTile(session))}>
+                Pass
+              </button>
+            )}
+            <button type="button" className="primary" onClick={() => onChange(finishTurn(session))}>
+              End turn
+            </button>
+          </div>
+        )}
+      </div>
 
       <section className="rack" aria-label="Your rack">
         {rows.map((slots, row) => (
