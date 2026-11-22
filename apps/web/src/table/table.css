@@ -212,6 +212,41 @@ body {
   outline: 2px solid #ffd54a;
 }
 
+.face-down[aria-disabled='true'] {
+  cursor: default;
+  outline: none;
+}
+
+/* The tile that has left the pool, and the one not yet landed in the rack: the flyer is it. */
+.face-down[data-lifted],
+.tile[data-arriving] {
+  visibility: hidden;
+}
+
+/*
+ * A drawn tile in flight. Invisible until its animation runs, so with no animation (reduced
+ * motion, or a browser without the Web Animations API) nothing is seen between the tile
+ * leaving the pool and appearing where it lands.
+ */
+.flyer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 8px 18px rgb(0 0 0 / 0.4);
+}
+
+.flyer-back {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 50% 50%, #e9c46a 0 12%, transparent 16%),
+    linear-gradient(160deg, #2b6b64, #1d4f4a);
+}
+
 .tile {
   display: inline-flex;
   flex-direction: column;

@@ -2,6 +2,7 @@ import type { Tile } from '@norikub/core/tiles';
 import type { MoveRefusal, TurnFault } from '@norikub/core/turn';
 
 import type { Frame } from './replay.ts';
+import { PERSON } from './session.ts';
 import type { Note } from './session.ts';
 
 export function tileName(tile: Tile): string {
@@ -56,8 +57,16 @@ export function frameText(frame: Frame): string {
   switch (frame.step.kind) {
     case 'placed':
       return `${frame.name} plays the ${tileName(frame.step.tile)}.`;
+    case 'drawing':
+      return frame.seat === PERSON ? 'You draw a tile.' : `${frame.name} draws a tile.`;
     case 'drew':
-      return `${frame.name} draws a tile.`;
+      return frame.step.face === null
+        ? `${frame.name} drew a tile.`
+        : `You drew the ${tileName(frame.step.face)}.`;
+    case 'passed':
+      return frame.seat === PERSON
+        ? 'The pool is empty, so you passed.'
+        : `The pool is empty, so ${frame.name} passed.`;
     case 'done':
       return `${frame.name} played ${frame.step.played} tile${frame.step.played === 1 ? '' : 's'}.`;
   }

@@ -207,7 +207,9 @@ describe('a bot turn on screen', () => {
     expect(opponents()).toContain('P1: 4 tiles');
     expect(screen.queryByRole('group', { name: 'Set 2' })?.textContent).toContain('4');
     expect(screen.queryByRole('button', { name: 'End turn' })).toBeNull();
-    expect(screen.queryByRole('region', { name: /Face-down tiles/ })).toBeNull();
+    const pool = () => screen.getAllByRole('button', { name: 'Face-down tile' });
+    const before = pool().length;
+    expect(pool()[0]?.getAttribute('aria-disabled')).toBe('true');
 
     wait(500);
     expect(status()).toBe('P1 plays the red 5.');
@@ -219,16 +221,47 @@ describe('a bot turn on screen', () => {
     wait(500);
     expect(status()).toBe('P1 played 4 tiles.');
     wait(800);
+    // The tile leaves the pool's last place and is in flight: the counts are still the old ones.
     expect(status()).toBe('P2 draws a tile.');
+    expect(opponents()).toContain('P2: 1 tiles');
+    expect(pool().at(-1)?.dataset.lifted).toBe('true');
+    expect(document.querySelector('.flyer')?.textContent).toBe('');
+    wait(600);
+    expect(status()).toBe('P2 drew a tile.');
     expect(opponents()).toContain('P2: 2 tiles');
-    wait(900);
+    expect(pool()).toHaveLength(before - 1);
+    expect(document.querySelector('.flyer')).toBeNull();
+    wait(400);
     expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
     expect(screen.getByRole('button', { name: 'End turn' })).toBeDefined();
     expect(status()).toBe('P1 played 4 tiles. P2 drew a tile.');
   });
 
-  it('takes no move while a bot’s turn is playing', () => {
+  it('shows the person’s own draw landing in the rack before the bots play', () => {
+    render(<Harness />);
+    act(() => {
+      fireEvent.click(
+        screen.getAllByRole('button', { name: 'Face-down tile' })[2] ?? document.body,
+      );
+    });
+    expect(status()).toBe('You draw a tile.');
+    const arriving = document.querySelector('.rack [data-arriving]');
+    expect(arriving).not.toBeNull();
+    const name = arriving?.getAttribute('aria-label') ?? '';
+    expect(document.querySelector('.flyer')?.textContent).not.toBe('');
+    wait(600);
+    expect(status()).toBe(`You drew the ${name}.`);
+    expect(document.querySelector('.rack [data-arriving]')).toBeNull();
+    expect(rack().getByRole('button', { name }).dataset.fresh).toBe('true');
+    wait(400);
+    expect(status()).toBe('P1 draws a tile.');
+  });
+
+  it('takes no move, and no pick, while a bot’s turn is playing', () => {
     render(<BotsFirstHarness />);
+    const faceDown = screen.getAllByRole('button', { name: 'Face-down tile' });
+    fireEvent.click(faceDown[0] ?? document.body);
+    expect(screen.getAllByRole('button', { name: 'Face-down tile' })).toHaveLength(faceDown.length);
     fireEvent.click(rack().getByRole('button', { name: 'black 2' }));
     fireEvent.click(screen.getByRole('group', { name: 'Set 1' }));
     expect(rack().getAllByRole('button')).toHaveLength(2);

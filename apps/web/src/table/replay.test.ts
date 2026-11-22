@@ -5,7 +5,7 @@ import type { Bot } from '@norikub/core/bot';
 
 import { layout } from '../../../../packages/core/src/fixtures.test-helpers.ts';
 import { framesOf } from './replay.ts';
-import { fromGame, newSession } from './session.ts';
+import { drawTile, fromGame, newSession } from './session.ts';
 
 // Seat 1 has melded and can lay a red 4-5-6 and add the orange 9 to the run on the table; seat
 // 2 has not melded and draws.
@@ -41,14 +41,31 @@ describe('the frames of a bot turn', () => {
     expect(frames.every((f) => f.name === 'P1' && f.seat === 1)).toBe(true);
   });
 
-  it('shows a draw as a draw, with the counts after it', () => {
+  it('shows a bot’s draw leaving the last tile in the pool, face down, then landed', () => {
     const before = { ...botsFirst(), current: 2 };
     const result = takeBotTurn(before);
-    const frames = framesOf(before, result);
-    expect(frames).toHaveLength(1);
-    expect(frames[0]?.step).toEqual({ kind: 'drew' });
-    expect(frames[0]?.counts[2]).toBe(2);
-    expect(frames[0]?.pool).toBe(before.pool.length - 1);
+    const [drawing, drew, ...rest] = framesOf(before, result);
+    expect(rest).toEqual([]);
+    expect(drawing?.step).toEqual({ kind: 'drawing', pick: before.pool.length - 1, face: null });
+    expect(drawing?.counts[2]).toBe(1);
+    expect(drawing?.pool).toBe(before.pool.length);
+    expect(drew?.step).toEqual({ kind: 'drew', face: null });
+    expect(drew?.counts[2]).toBe(2);
+    expect(drew?.pool).toBe(before.pool.length - 1);
+  });
+
+  it('never names the tile a bot drew', () => {
+    const before = { ...botsFirst(), current: 2 };
+    const result = takeBotTurn(before);
+    const drawn = result.game.players[2]?.rack.at(-1);
+    if (drawn === undefined) throw new Error('the bot drew nothing');
+    expect(JSON.stringify(framesOf(before, result))).not.toContain(drawn.id);
+  });
+
+  it('shows a pass, with the pool empty, as a pass and nothing travelling', () => {
+    const before = { ...botsFirst(), current: 2, pool: [] };
+    const frames = framesOf(before, takeBotTurn(before));
+    expect(frames.map((f) => f.step)).toEqual([{ kind: 'passed' }]);
   });
 
   it('shows a proposal the engine refused as the draw it became', () => {
@@ -58,7 +75,37 @@ describe('the frames of a bot turn', () => {
       moves: [{ kind: 'to-new-set', tileId: 'blue-1-b' }],
     });
     const frames = framesOf(before, takeBotTurn(before, broken));
-    expect(frames.map((f) => f.step.kind)).toEqual(['drew']);
+    expect(frames.map((f) => f.step.kind)).toEqual(['drawing', 'drew']);
+  });
+});
+
+describe('the person’s draw', () => {
+  it('plays first, face up, from the tile they picked, then the bots', () => {
+    const s = fromGame(
+      layout([{ rack: ['black-2-a'] }, { rack: ['red-1-b'] }, { rack: ['blue-1-b'] }]),
+      [],
+    );
+    const picked = s.game.pool[5];
+    const next = drawTile(s, 5);
+    const steps = next.replay.map((f) => f.step);
+    expect(steps.slice(0, 2)).toEqual([
+      { kind: 'drawing', pick: 5, face: picked },
+      { kind: 'drew', face: picked },
+    ]);
+    expect(next.replay[0]?.seat).toBe(0);
+    expect(steps.slice(2).map((step) => step.kind)).toEqual(['drawing', 'drew', 'drawing', 'drew']);
+  });
+
+  it('has nothing to watch for a pass of their own', () => {
+    const s = fromGame(
+      {
+        ...layout([{ rack: ['black-2-a'] }, { rack: ['red-1-b'] }, { rack: ['blue-1-b'] }]),
+        pool: [],
+      },
+      [],
+    );
+    const next = drawTile(s);
+    expect(next.replay.map((f) => f.step.kind)).toEqual(['passed', 'passed']);
   });
 });
 
@@ -73,6 +120,7 @@ describe('a session after bot turns', () => {
       'placed',
       'placed',
       'done',
+      'drawing',
       'drew',
     ]);
   });

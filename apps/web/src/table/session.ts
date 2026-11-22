@@ -7,7 +7,7 @@ import type { Move, MoveRefusal, Turn, TurnFault } from '@norikub/core/turn';
 
 import { dealRows, placeOnRack, reconcileRows } from './rack.ts';
 import type { RackRows } from './rack.ts';
-import { framesOf } from './replay.ts';
+import { drawFrames, framesOf } from './replay.ts';
 import type { Frame } from './replay.ts';
 
 /** The seat the person plays from; the other seats are bots. */
@@ -54,9 +54,15 @@ export function newSession(seed: number): Session {
 
 /**
  * A session at the person's turn, after any bots due before it have played. With no rows
- * given, the rack is laid out as a fresh deal.
+ * given, the rack is laid out as a fresh deal. `lead` is played back before the bots' turns:
+ * the person's own draw.
  */
-export function fromGame(game: Game, notes: readonly Note[], rows?: RackRows): Session {
+export function fromGame(
+  game: Game,
+  notes: readonly Note[],
+  rows?: RackRows,
+  lead: readonly Frame[] = [],
+): Session {
   const played = playBots(game);
   const turn = played.game.status.kind === 'playing' ? startTurn(played.game) : null;
   const rack = played.game.players[PERSON]?.rack ?? [];
@@ -67,7 +73,7 @@ export function fromGame(game: Game, notes: readonly Note[], rows?: RackRows): S
     rows: laidOut,
     startRows: laidOut,
     notes: [...notes, ...played.notes],
-    replay: played.frames,
+    replay: [...lead, ...played.frames],
   };
 }
 
@@ -164,5 +170,10 @@ export function drawTile(session: Session, pick?: number): Session {
     session.turn.start.players[PERSON]?.rack ?? [],
     session.startRows,
   );
-  return fromGame(result.game, [{ kind: 'drew', tile: result.drawn }], back);
+  // A pass is told in the note alone; only a tile drawn has something to watch.
+  const lead =
+    result.drawn === null || pick === undefined
+      ? []
+      : drawFrames(session.turn.start, result.game, pick, result.drawn);
+  return fromGame(result.game, [{ kind: 'drew', tile: result.drawn }], back, lead);
 }

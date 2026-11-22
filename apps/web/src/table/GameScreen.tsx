@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 import { arrangeSet, judgeSet } from '@norikub/core/sets';
@@ -7,7 +7,7 @@ import type { Tile } from '@norikub/core/tiles';
 import { dropAttribute, toMove, useDrag } from './drag.ts';
 import type { Drag, DropTarget } from './drag.ts';
 import { frameText, noteText, refusalText, tileName } from './messages.ts';
-import { usePlayback } from './playback.ts';
+import { FLIGHT_MS, usePlayback } from './playback.ts';
 import { PERSON, drawTile, finishTurn, moveTile, probe, undoTurn } from './session.ts';
 import type { Session } from './session.ts';
 import './table.css';
@@ -49,19 +49,23 @@ function TileButton({
   lifted,
   selected,
   fresh,
+  arriving,
 }: {
   tile: Tile;
   events: TileEvents;
   lifted: boolean;
   selected: boolean;
   fresh: boolean;
+  arriving: boolean;
 }) {
   return (
     <button
       type="button"
       className="tile"
+      data-tile={tile.id}
       data-colour={tile.kind === 'joker' ? 'joker' : tile.colour}
       data-lifted={lifted || undefined}
+      data-arriving={arriving || undefined}
       data-selected={selected || undefined}
       data-fresh={fresh || undefined}
       aria-label={tileName(tile)}
@@ -90,6 +94,7 @@ type TileProps = {
   lifted: boolean;
   selected: boolean;
   fresh: boolean;
+  arriving: boolean;
 };
 
 /**
@@ -215,8 +220,14 @@ export function GameScreen({
     fresh:
       watching === null
         ? onTable && turn !== null && !startIds.has(tile.id)
-        : watching.step.kind === 'placed' && watching.step.tile.id === tile.id,
+        : (watching.step.kind === 'placed' && watching.step.tile.id === tile.id) ||
+          (watching.step.kind === 'drew' && watching.step.face?.id === tile.id),
+    // The person's drawn tile is already in the rack; it stays out of sight until its flight
+    // lands there.
+    arriving: watching?.step.kind === 'drawing' && watching.step.face?.id === tile.id,
   });
+  const poolCount = watching?.pool ?? game.pool.length;
+  const flyingFrom = watching?.step.kind === 'drawing' ? watching.step.pick : null;
 
   const opponents = game.players.flatMap((player, seat) =>
     seat === PERSON
@@ -237,12 +248,12 @@ export function GameScreen({
       <header className="game-bar">
         <ul className="opponents" aria-label="Opponents">
           {opponents.map((o) => (
-            <li key={o.seat} data-playing={o.playing || undefined}>
+            <li key={o.seat} data-seat={o.seat} data-playing={o.playing || undefined}>
               {o.name}: {o.count} tiles
             </li>
           ))}
         </ul>
-        <span>Pool: {watching?.pool ?? game.pool.length}</span>
+        <span>Pool: {poolCount}</span>
       </header>
 
       <section className="table" aria-label="Table">
@@ -281,20 +292,40 @@ export function GameScreen({
         )}
       </section>
 
-      {watching === null && status.kind === 'playing' && game.pool.length > 0 && (
+      {(watching !== null || status.kind === 'playing') && poolCount > 0 && (
         // Face down, as at a real table: the buttons carry their place in the pool and nothing
-        // else, so the page itself never says what a tile is before it is drawn.
+        // else, so the page itself never says what a tile is before it is drawn. It stays on
+        // screen while a turn plays back, as the place a drawn tile leaves from, but takes no
+        // pick then.
         <section className="pool" aria-label="Face-down tiles: pick one to draw">
-          {game.pool.map((_, pick) => (
+          {Array.from({ length: poolCount }, (_, pick) => (
             <button
               key={pick}
               type="button"
               className="face-down"
               aria-label="Face-down tile"
-              onClick={() => onChange(drawTile(session, pick))}
+              aria-disabled={watching !== null || undefined}
+              data-pick={pick}
+              data-lifted={pick === flyingFrom || undefined}
+              onClick={() => {
+                if (watching === null) onChange(drawTile(session, pick));
+              }}
             />
           ))}
         </section>
+      )}
+
+      {watching?.step.kind === 'drawing' && (
+        <Flight
+          key={playback.index}
+          pick={watching.step.pick}
+          to={
+            watching.step.face === null
+              ? `[data-seat="${watching.seat}"]`
+              : `.rack [data-tile="${watching.step.face.id}"]`
+          }
+          face={watching.step.face}
+        />
       )}
 
       <p className="notes" role="status">
@@ -364,6 +395,87 @@ function findTile(
   table: readonly (readonly Tile[])[],
 ): Tile | undefined {
   return [...rack, ...table.flat()].find((tile) => tile.id === drag.tileId);
+}
+
+/**
+ * A drawn tile on its way from the pool to whoever drew it: to the person's rack, turning face
+ * up as it lands, or to a bot's place in the bar, face down all the way. It is only for the
+ * eye. The playback's timer, not this, decides when the tile has landed, so a browser that
+ * cannot animate, or a person who asked for less motion, sees the tile appear where it lands.
+ */
+function Flight({ pick, to, face }: { pick: number; to: string; face: Tile | null }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const flyer = ref.current;
+    const from = document.querySelector(`.pool [data-pick="${pick}"]`);
+    const dest = document.querySelector(to);
+    if (flyer === null || from === null || dest === null) return;
+    if (typeof flyer.animate !== 'function') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const a = from.getBoundingClientRect();
+    const b = dest.getBoundingClientRect();
+    // The flyer is drawn at a rack tile's size and scaled down to the pool tile it leaves.
+    const width = face === null ? a.width * 1.6 : b.width;
+    const height = face === null ? a.height * 1.6 : b.height;
+    flyer.style.width = `${width}px`;
+    flyer.style.height = `${height}px`;
+    const at = (rect: DOMRect, scale: number) =>
+      `translate(${rect.left + rect.width / 2 - width / 2}px, ${rect.top + rect.height / 2 - height / 2}px) scale(${scale})`;
+    const animations = [
+      flyer.animate(
+        [
+          { transform: at(a, a.width / width), opacity: 1 },
+          { transform: at(a, (a.width / width) * 1.25), opacity: 1, offset: 0.15 },
+          // A bot's tile reaches its name whole, then goes into it; fading on the way, it was
+          // gone before it got there (seen 22 Nov 2026, Chromium at 430 px wide).
+          ...(face === null
+            ? [
+                { transform: at(b, 0.9), opacity: 1, offset: 0.8 },
+                { transform: at(b, 0.4), opacity: 0 },
+              ]
+            : [{ transform: at(b, 1), opacity: 1 }]),
+        ],
+        { duration: FLIGHT_MS, easing: 'cubic-bezier(0.3, 0.7, 0.4, 1)', fill: 'forwards' },
+      ),
+    ];
+    const back = flyer.querySelector('.flyer-back');
+    if (face !== null && back !== null) {
+      // Turned over at the end of the flight: squeezed to an edge, the back taken away, opened
+      // out face up.
+      animations.push(
+        flyer.animate(
+          [
+            { scale: '1 1', offset: 0 },
+            { scale: '1 1', offset: 0.7 },
+            { scale: '0 1', offset: 0.85 },
+            { scale: '1 1', offset: 1 },
+          ],
+          { duration: FLIGHT_MS, fill: 'forwards' },
+        ),
+        back.animate(
+          [
+            { opacity: 1, offset: 0 },
+            { opacity: 1, offset: 0.85 },
+            { opacity: 0, offset: 0.851 },
+            { opacity: 0, offset: 1 },
+          ],
+          { duration: FLIGHT_MS, fill: 'forwards' },
+        ),
+      );
+    }
+    return () => animations.forEach((animation) => animation.cancel());
+  }, [pick, to, face]);
+  return (
+    <div
+      ref={ref}
+      className="tile flyer"
+      data-colour={face === null ? undefined : face.kind === 'joker' ? 'joker' : face.colour}
+      aria-hidden="true"
+    >
+      {face !== null && <TileFace tile={face} />}
+      <span className="flyer-back" />
+    </div>
+  );
 }
 
 /** The tile under the finger. It takes no pointer events, so the drop target is found under it. */

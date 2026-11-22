@@ -4,13 +4,23 @@ import type { Frame } from './replay.ts';
 
 // How long each frame stays up, by what it shows. 500 ms a tile is the middle of the 400–600
 // ms the ticket started from: slow enough to see where each tile lands, quick enough that a
-// bot laying down a dozen tiles takes about six seconds. The draw and the end of a turn hold
-// longer, because nothing moves in them and the caption is the thing to read.
-const HOLD: Record<Frame['step']['kind'], number> = { placed: 500, drew: 900, done: 800 };
+// bot laying down a dozen tiles takes about six seconds. The end of a turn and a pass hold
+// longer, because nothing moves in them and the caption is the thing to read. A draw is the
+// flight (`drawing`, which FLIGHT_MS fills) and a moment with the tile landed (`drew`).
+export const FLIGHT_MS = 600;
+const HOLD: Record<Frame['step']['kind'], number> = {
+  placed: 500,
+  drawing: FLIGHT_MS,
+  drew: 400,
+  passed: 900,
+  done: 800,
+};
 
 export type Playback = {
   /** The frame on screen, or null once the playback has run out or been skipped. */
   readonly frame: Frame | null;
+  /** The place of `frame` in the list, so two frames that look alike are told apart. */
+  readonly index: number;
   readonly skip: () => void;
 };
 
@@ -35,5 +45,5 @@ export function usePlayback(frames: readonly Frame[]): Playback {
     return () => clearTimeout(timer);
   }, [frame, frames]);
 
-  return { frame, skip: () => setAt({ frames, index: frames.length }) };
+  return { frame, index: current.index, skip: () => setAt({ frames, index: frames.length }) };
 }
