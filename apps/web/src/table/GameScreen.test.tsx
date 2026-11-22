@@ -533,3 +533,113 @@ describe('a held tile (KUB-2)', () => {
     fireEvent.pointerCancel(tile);
   });
 });
+
+describe('a finger on a full table (KUB-27)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const tableTile = (name: string) =>
+    within(screen.getByRole('group', { name: 'Set 1' })).getByRole('button', { name });
+  const touch = { button: 0, pointerId: 1, pointerType: 'touch' };
+  const ghost = () => document.querySelector('.ghost');
+  const wait = (ms: number) => {
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+  };
+  /** Whether the page's scroll was refused for a finger moving now. */
+  const touchMove = () => {
+    const event = new Event('touchmove', { bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+
+  it('scrolls, and lifts nothing, when it moves up or down first', () => {
+    render(<Harness />);
+    const tile = tableTile('orange 11');
+    pointAt(newSetZone());
+    fireEvent.pointerDown(tile, { ...touch, clientX: 50, clientY: 100 });
+    fireEvent.pointerMove(tile, { pointerId: 1, clientX: 52, clientY: 70 });
+    expect(touchMove()).toBe(false);
+    wait(1000);
+    expect(ghost()).toBeNull();
+    fireEvent.pointerUp(tile, { pointerId: 1, clientX: 52, clientY: 70 });
+    fireEvent.click(tile);
+    expect(tile.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByRole('group', { name: 'Set 2' })).toBeNull();
+  });
+
+  it('lifts a tile rested on, which then holds the page still and drops where it goes', () => {
+    render(<Harness />);
+    const tile = tableTile('orange 13');
+    pointAt(newSetZone());
+    fireEvent.pointerDown(tile, { ...touch, clientX: 50, clientY: 100 });
+    wait(299);
+    expect(ghost()).toBeNull();
+    wait(1);
+    expect(ghost()).not.toBeNull();
+    expect(touchMove()).toBe(true);
+    fireEvent.pointerMove(tile, { pointerId: 1, clientX: 50, clientY: 300 });
+    fireEvent.pointerUp(tile, { pointerId: 1, clientX: 50, clientY: 300 });
+    expect(ghost()).toBeNull();
+    expect(touchMove()).toBe(false);
+    const set = screen.getByRole('group', { name: 'Set 2' });
+    expect(within(set).getByRole('button', { name: 'orange 13' })).toBeDefined();
+  });
+
+  it('lifts at once when it moves sideways first', () => {
+    render(<Harness />);
+    const tile = tableTile('orange 13');
+    pointAt(newSetZone());
+    fireEvent.pointerDown(tile, { ...touch, clientX: 50, clientY: 100 });
+    fireEvent.pointerMove(tile, { pointerId: 1, clientX: 80, clientY: 105 });
+    expect(ghost()).not.toBeNull();
+    expect(newSetZone().dataset.zone).toBe('over');
+    fireEvent.pointerCancel(tile);
+    expect(ghost()).toBeNull();
+  });
+
+  it('puts a rested-on tile back when let go where it was, without splitting its run', () => {
+    render(<Harness />);
+    const tile = tableTile('orange 11');
+    pointAt(screen.getByRole('group', { name: 'Set 1' }));
+    fireEvent.pointerDown(tile, { ...touch, clientX: 50, clientY: 100 });
+    wait(300);
+    fireEvent.pointerUp(tile, { pointerId: 1, clientX: 52, clientY: 101 });
+    fireEvent.click(tile);
+    expect(ghost()).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Set 2' })).toBeNull();
+    const set = screen.getByRole('group', { name: 'Set 1' });
+    expect(set.querySelectorAll('.tile')).toHaveLength(4);
+    expect(tableTile('orange 11').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('still lifts a rack tile at once, whichever way it moves', () => {
+    render(<Harness />);
+    const tile = rack().getByRole('button', { name: 'red 13' });
+    expect(tile.dataset.scrolls).toBeUndefined();
+    expect(tableTile('orange 13').dataset.scrolls).toBe('true');
+    pointAt(newSetZone());
+    fireEvent.pointerDown(tile, { ...touch, clientX: 50, clientY: 600 });
+    fireEvent.pointerMove(tile, { pointerId: 1, clientX: 50, clientY: 400 });
+    expect(ghost()).not.toBeNull();
+    fireEvent.pointerUp(tile, { pointerId: 1, clientX: 50, clientY: 400 });
+    expect(screen.getByRole('group', { name: 'Set 2' }).textContent).toContain('13');
+  });
+
+  it('lets a quick tap still pick a table tile', () => {
+    render(<Harness />);
+    const tile = tableTile('orange 13');
+    fireEvent.pointerDown(tile, { ...touch, clientX: 50, clientY: 100 });
+    wait(100);
+    fireEvent.pointerUp(tile, { pointerId: 1, clientX: 50, clientY: 100 });
+    fireEvent.click(tile);
+    wait(1000);
+    expect(ghost()).toBeNull();
+    expect(tile.getAttribute('aria-pressed')).toBe('true');
+  });
+});

@@ -25,7 +25,11 @@ import type { Session } from './session.ts';
 import './table.css';
 
 type TileEvents = {
-  readonly onPointerDown: (tileId: string, event: ReactPointerEvent<HTMLElement>) => void;
+  readonly onPointerDown: (
+    tileId: string,
+    event: ReactPointerEvent<HTMLElement>,
+    scrolls: boolean,
+  ) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
   readonly onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
   readonly onPointerCancel: () => void;
@@ -55,21 +59,7 @@ function TileFace({ tile }: { tile: Tile }) {
   );
 }
 
-function TileButton({
-  tile,
-  events,
-  lifted,
-  selected,
-  fresh,
-  arriving,
-}: {
-  tile: Tile;
-  events: TileEvents;
-  lifted: boolean;
-  selected: boolean;
-  fresh: boolean;
-  arriving: boolean;
-}) {
+function TileButton({ tile, events, lifted, selected, fresh, arriving, scrolls }: TileProps) {
   return (
     <button
       type="button"
@@ -80,9 +70,10 @@ function TileButton({
       data-arriving={arriving || undefined}
       data-selected={selected || undefined}
       data-fresh={fresh || undefined}
+      data-scrolls={scrolls || undefined}
       aria-label={tileName(tile)}
       aria-pressed={selected}
-      onPointerDown={(event) => events.onPointerDown(tile.id, event)}
+      onPointerDown={(event) => events.onPointerDown(tile.id, event, scrolls)}
       onPointerMove={events.onPointerMove}
       onPointerUp={events.onPointerUp}
       onPointerCancel={events.onPointerCancel}
@@ -107,6 +98,8 @@ type TileProps = {
   selected: boolean;
   fresh: boolean;
   arriving: boolean;
+  /** On the table, which a finger scrolls: a touch lifts the tile by resting on it (KUB-27). */
+  scrolls: boolean;
 };
 
 /**
@@ -327,6 +320,7 @@ export function GameScreen({
     // The person's drawn tile is already in the rack; it stays out of sight until its flight
     // lands there.
     arriving: watching?.step.kind === 'drawing' && watching.step.face?.id === tile.id,
+    scrolls: onTable,
   });
   const pile = watching?.pile ?? fitPile(session.pile, game.pool.length);
   const poolCount = pile.length;

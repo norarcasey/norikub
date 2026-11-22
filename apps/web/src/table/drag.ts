@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
 import type { Move } from '@norikub/core/turn';
@@ -62,6 +62,11 @@ export type Drag = {
 // hand, not yet measured on the phone (KUB-2).
 const DRAG_THRESHOLD = 6;
 
+// How long a finger rests on a table tile before it lifts (KUB-27). Long enough that a finger
+// put down to scroll has started moving first, short enough not to feel like waiting. iOS's own
+// long press is 500ms; this is under it, picked by hand and not yet measured on the phone.
+const HOLD_MS = 300;
+
 // How near the edge of a scrolling area a held tile starts it scrolling, and how fast at most,
 // in px per frame. The dwell keeps a tile carried up from the rack, across the table's bottom
 // edge, from scrolling the table on its way past. Picked by hand, not measured (KUB-2).
@@ -71,6 +76,21 @@ const DWELL_MS = 120;
 
 type Handlers = {
   readonly onDrop: (tileId: string, target: DropTarget) => void;
+};
+
+/**
+ * A tile pressed and not yet lifted. Without `hold`, the first move past the threshold lifts
+ * it: a mouse, or a finger on the rack. With `hold`, a finger on a tile in a scrolling area,
+ * an up-or-down first move is the area's scroll and not a drag; a sideways one lifts it at
+ * once, because `touch-action: pan-y` never scrolls sideways; resting `HOLD_MS` lifts it too.
+ */
+type Press = {
+  readonly tileId: string;
+  readonly pointerId: number;
+  readonly x: number;
+  readonly y: number;
+  readonly element: HTMLElement;
+  readonly hold: boolean;
 };
 
 type Rect = {
@@ -105,7 +125,9 @@ export function edgeSpeed(rect: Rect, x: number, y: number): number {
  * here instead.
  *
  * The pointer is captured on the tile pressed, so the drag keeps its events when the finger
- * leaves the tile, and the page does not scroll under it (`touch-action: none` on the tile).
+ * leaves the tile. A rack tile has `touch-action: none`, so the page never scrolls under it and
+ * a drag starts at once. A table tile has `pan-y`, because the table scrolls and a full table is
+ * nearly all tiles (KUB-27): a finger lifts one by resting on it or moving sideways (`Press`).
  * The ghost follows the pointer by its own style: the screen renders when the target under the
  * pointer changes, not on every move, which re-rendered the whole table at the pointer's rate.
  *
@@ -114,7 +136,8 @@ export function edgeSpeed(rect: Rect, x: number, y: number): number {
  */
 export function useDrag({ onDrop }: Handlers) {
   const [drag, setDrag] = useState<Drag | null>(null);
-  const pressed = useRef<{ tileId: string; pointerId: number; x: number; y: number } | null>(null);
+  const pressed = useRef<Press | null>(null);
+  const holding = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The drag as the handlers last saw it, the pointer's latest position included.
   const inFlight = useRef<Drag | null>(null);
   // A drag that ends over its own tile would also fire a click; this swallows that one click.
@@ -173,24 +196,81 @@ export function useDrag({ onDrop }: Handlers) {
     frame.current = requestAnimationFrame(step);
   }, [track]);
 
+  const stopHolding = useCallback(() => {
+    if (holding.current !== null) clearTimeout(holding.current);
+    holding.current = null;
+  }, []);
+
+  /** The pressed tile leaves its place and follows the pointer, now at `x`, `y`. */
+  const lift = useCallback((press: Press, x: number, y: number) => {
+    const rect = press.element.getBoundingClientRect();
+    const next: Drag = {
+      tileId: press.tileId,
+      pointerId: press.pointerId,
+      x,
+      y,
+      grabX: press.x - rect.left,
+      grabY: press.y - rect.top,
+      width: rect.width,
+      height: rect.height,
+      target: targetAt(x, y),
+    };
+    inFlight.current = next;
+    setDrag(next);
+  }, []);
+
+  // Once a tile is in flight, a finger moving up or down must not start the scroll that
+  // `pan-y` allows: the touch's moves are refused to the page for as long as the drag lasts.
+  // Not passive, or the refusal is ignored; React's own touch handlers are passive.
+  useEffect(() => {
+    const refuse = (event: TouchEvent) => {
+      if (inFlight.current !== null && event.cancelable) event.preventDefault();
+    };
+    document.addEventListener('touchmove', refuse, { passive: false });
+    return () => {
+      document.removeEventListener('touchmove', refuse);
+      if (holding.current !== null) clearTimeout(holding.current);
+    };
+  }, []);
+
   const end = useCallback(() => {
+    stopHolding();
     pressed.current = null;
     inFlight.current = null;
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     frame.current = null;
     dwell.current.clear();
     setDrag(null);
-  }, []);
+  }, [stopHolding]);
 
-  const onPointerDown = useCallback((tileId: string, event: ReactPointerEvent<HTMLElement>) => {
-    if (event.button !== 0) return;
-    dragged.current = false;
-    pressed.current = { tileId, pointerId: event.pointerId, x: event.clientX, y: event.clientY };
-    const element = event.currentTarget;
-    if (typeof element.setPointerCapture === 'function') {
-      element.setPointerCapture(event.pointerId);
-    }
-  }, []);
+  /** `scrolls`: the tile lies in an area a finger scrolls, so a touch on it lifts by `hold`. */
+  const onPointerDown = useCallback(
+    (tileId: string, event: ReactPointerEvent<HTMLElement>, scrolls = false) => {
+      if (event.button !== 0) return;
+      stopHolding();
+      dragged.current = false;
+      const element = event.currentTarget;
+      const press: Press = {
+        tileId,
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        element,
+        hold: scrolls && event.pointerType === 'touch',
+      };
+      pressed.current = press;
+      if (press.hold) {
+        holding.current = setTimeout(() => {
+          holding.current = null;
+          if (pressed.current === press && inFlight.current === null) lift(press, press.x, press.y);
+        }, HOLD_MS);
+      }
+      if (typeof element.setPointerCapture === 'function') {
+        element.setPointerCapture(event.pointerId);
+      }
+    },
+    [stopHolding, lift],
+  );
 
   const onPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
@@ -200,25 +280,22 @@ export function useDrag({ onDrop }: Handlers) {
       if (inFlight.current !== null) {
         track(x, y);
       } else {
-        if (Math.hypot(x - press.x, y - press.y) < DRAG_THRESHOLD) return;
-        const rect = event.currentTarget.getBoundingClientRect();
-        const next: Drag = {
-          tileId: press.tileId,
-          pointerId: press.pointerId,
-          x,
-          y,
-          grabX: press.x - rect.left,
-          grabY: press.y - rect.top,
-          width: rect.width,
-          height: rect.height,
-          target: targetAt(x, y),
-        };
-        inFlight.current = next;
-        setDrag(next);
+        const dx = x - press.x;
+        const dy = y - press.y;
+        if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+        stopHolding();
+        if (press.hold && Math.abs(dy) >= Math.abs(dx)) {
+          // A scroll of the table, which the page takes (and cancels this pointer for). If it
+          // has nothing to scroll and lets the touch end as a tap, the tap is not a pick.
+          pressed.current = null;
+          dragged.current = true;
+          return;
+        }
+        lift(press, x, y);
       }
       keepScrolling();
     },
-    [track, keepScrolling],
+    [track, keepScrolling, stopHolding, lift],
   );
 
   const onPointerUp = useCallback(
@@ -229,6 +306,10 @@ export function useDrag({ onDrop }: Handlers) {
       end();
       if (current === null) return;
       dragged.current = true;
+      // Lifted by holding and let go where it was: put back, not dropped on its own set, which
+      // for a tile inside a run would split the run there.
+      const still = Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_THRESHOLD;
+      if (press.hold && still) return;
       const target = targetAt(event.clientX, event.clientY);
       if (target !== null) onDrop(current.tileId, target);
     },

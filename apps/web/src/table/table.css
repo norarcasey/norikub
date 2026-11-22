@@ -417,6 +417,12 @@ body {
   touch-action: none;
 }
 
+/* A full table is nearly all tiles, so a finger on one must still scroll it up and down
+   (KUB-27). It lifts by resting on the tile or moving sideways; drag.ts says how. */
+.tile[data-scrolls] {
+  touch-action: pan-y;
+}
+
 .tile-value {
   font-size: calc(var(--tile-w) * 0.5);
   font-weight: 700;
