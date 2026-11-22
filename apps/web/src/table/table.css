@@ -28,7 +28,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  min-height: 100dvh;
+  /*
+   * The game fits the screen and the table scrolls inside it (KUB-2). When the page grew past
+   * the screen instead, the top of a full table was out of reach of a tile held from the rack:
+   * nothing scrolls under a drag. A screen too short for even that scrolls as a whole.
+   */
+  height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow-y: auto;
   box-sizing: border-box;
   padding: 8px 16px;
   /* A long press on a tile is the start of a drag, not a text selection or a callout. */
@@ -53,7 +59,8 @@ body {
 }
 
 .table {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: calc(var(--tile-w) * 1.4 + 40px);
   display: flex;
   flex-wrap: wrap;
   align-content: flex-start;
@@ -62,6 +69,7 @@ body {
   border-radius: 12px;
   background: var(--felt);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .set {
@@ -108,11 +116,26 @@ body {
   background: rgb(126 215 165 / 0.12);
 }
 
-/* Where a run will be cut when the held tile is let go on it (KUB-23). */
+/*
+ * Where a run will be cut when the held tile is let go on it (KUB-23). It takes no room: with
+ * 12px of its own it widened the set, the table rewrapped, the set moved out from under the
+ * finger and the cut went away, over and over (the jitter Nora saw, KUB-2). Its width is
+ * cancelled by its margins and the gap it adds, and the line is drawn over the gap.
+ */
 .set-cut {
+  position: relative;
   align-self: stretch;
+  width: 0;
+  margin: 0 -1px;
+}
+
+.set-cut::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: -2px;
   width: 4px;
-  margin: 0 4px;
   border-radius: 2px;
   background: var(--ok);
 }
@@ -134,6 +157,16 @@ body {
   margin: 0;
   font-size: 15px;
   line-height: 1.3;
+  /*
+   * Always two lines tall. The line changes while a tile is held (a refusal, a split), and as
+   * it went from one line to two the rack moved under the finger (KUB-2).
+   */
+  height: 2.6em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 /* The end of the game, where the pool lay: the table stays in view above it. */
@@ -442,6 +475,7 @@ body {
   z-index: 10;
   pointer-events: none;
   cursor: grabbing;
+  will-change: transform;
   box-shadow: 0 8px 18px rgb(0 0 0 / 0.4);
 }
 

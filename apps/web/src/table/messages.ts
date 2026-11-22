@@ -14,6 +14,10 @@ export function splitText(tile: Tile): string {
   return `Let go to split the run and put the ${tileName(tile)} on the end of the first half.`;
 }
 
+export function pickedText(count: number): string {
+  return `${count} tiles picked. Tap New set, a set, or a place in your rack to put them there.`;
+}
+
 export function refusalText(refusal: MoveRefusal): string {
   switch (refusal.kind) {
     case 'table-tile-to-rack':

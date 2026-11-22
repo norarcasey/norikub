@@ -419,3 +419,117 @@ describe('the end of the game', () => {
     expect(onNewGame).toHaveBeenCalledOnce();
   });
 });
+
+describe('tapping several tiles (KUB-2)', () => {
+  it('plays the tiles tapped as a new set with one tap of New set', () => {
+    render(<Harness />);
+    for (const name of ['red 13', 'blue 13', 'black 13']) {
+      fireEvent.click(rack().getByRole('button', { name }));
+    }
+    expect(screen.getByRole('status').textContent).toMatch(/3 tiles picked/);
+    fireEvent.click(newSetZone());
+    expect(setLabels(2)).toEqual(['red 13', 'blue 13', 'black 13']);
+    expect(rack().queryAllByRole('button')).toHaveLength(0);
+  });
+
+  it('lets a tapped tile go again with a second tap', () => {
+    render(<Harness />);
+    const red = rack().getByRole('button', { name: 'red 13' });
+    fireEvent.click(red);
+    fireEvent.click(rack().getByRole('button', { name: 'blue 13' }));
+    fireEvent.click(red);
+    expect(red.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(newSetZone());
+    expect(setLabels(2)).toEqual(['blue 13']);
+  });
+
+  it('lets the tapped tiles go on Take back', () => {
+    render(<Harness />);
+    fireEvent.click(rack().getByRole('button', { name: 'red 13' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Take back' }));
+    expect(rack().getByRole('button', { name: 'red 13' }).getAttribute('aria-pressed')).toBe(
+      'false',
+    );
+  });
+
+  it('plays on a set when any tile of it is tapped, not only its edge', () => {
+    render(<SplitHarness />);
+    fireEvent.click(rack().getByRole('button', { name: 'red 8' }));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Set 1' })).getByRole('button', { name: 'red 3' }),
+    );
+    expect(setLabels(1)).toEqual(['red 3', 'red 4', 'red 5', 'red 6', 'red 7', 'red 8']);
+  });
+
+  it('gathers tiles from one set, then plays them on another', () => {
+    render(<SplitHarness />);
+    const run = () => within(screen.getByRole('group', { name: 'Set 1' }));
+    fireEvent.click(rack().getByRole('button', { name: 'red 5' }));
+    fireEvent.click(rack().getByRole('button', { name: 'red 8' }));
+    fireEvent.click(newSetZone());
+    fireEvent.click(run().getByRole('button', { name: 'red 6' }));
+    fireEvent.click(run().getByRole('button', { name: 'red 7' }));
+    expect(run().getByRole('button', { name: 'red 7' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Set 2' })).getByRole('button', { name: 'red 8' }),
+    );
+    expect(setLabels(1)).toEqual(['red 3', 'red 4', 'red 5']);
+    expect(setLabels(2)).toEqual(['red 5', 'red 6', 'red 7', 'red 8']);
+  });
+});
+
+describe('a held tile (KUB-2)', () => {
+  let frames: FrameRequestCallback[] = [];
+  beforeEach(() => {
+    frames = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+  const runFrame = (now: number) => {
+    const due = frames;
+    frames = [];
+    due.forEach((callback) => callback(now));
+  };
+
+  it('moves the held tile with the pointer while the target stays the same', () => {
+    render(<Harness />);
+    const tile = rack().getByRole('button', { name: 'red 13' });
+    dragTile(tile, newSetZone(), false);
+    const ghost = document.querySelector<HTMLElement>('.ghost');
+    fireEvent.pointerMove(tile, { pointerId: 1, clientX: 140, clientY: 60 });
+    expect(document.querySelector('.ghost')).toBe(ghost);
+    expect(ghost?.style.transform).toBe('translate(130px, 50px)');
+    expect(newSetZone().dataset.zone).toBe('over');
+    fireEvent.pointerUp(tile, { pointerId: 1, clientX: 140, clientY: 60 });
+    expect(document.querySelector('.ghost')).toBeNull();
+  });
+
+  it('scrolls the table when held at its top, once it has stayed there', () => {
+    render(<Harness />);
+    const table = screen.getByRole('region', { name: 'Table' });
+    Object.defineProperty(table, 'scrollHeight', { configurable: true, value: 900 });
+    Object.defineProperty(table, 'clientHeight', { configurable: true, value: 300 });
+    table.scrollTop = 200;
+    table.getBoundingClientRect = () => DOMRect.fromRect({ x: 0, y: 100, width: 400, height: 300 });
+    const tile = rack().getByRole('button', { name: 'red 13' });
+    pointAt(table);
+    fireEvent.pointerDown(tile, { button: 0, pointerId: 1, clientX: 50, clientY: 600 });
+    fireEvent.pointerMove(tile, { pointerId: 1, clientX: 50, clientY: 90 });
+    runFrame(1000);
+    expect(table.scrollTop).toBe(200);
+    runFrame(1200);
+    expect(table.scrollTop).toBeLessThan(200);
+    fireEvent.pointerMove(tile, { pointerId: 1, clientX: 50, clientY: 250 });
+    const still = table.scrollTop;
+    runFrame(1300);
+    expect(table.scrollTop).toBe(still);
+    expect(frames).toHaveLength(0);
+    fireEvent.pointerCancel(tile);
+  });
+});

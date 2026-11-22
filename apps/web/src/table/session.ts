@@ -5,6 +5,8 @@ import type { Tile } from '@norikub/core/tiles';
 import { drawInstead, endTurn, move, startTurn, takeBack } from '@norikub/core/turn';
 import type { Move, MoveRefusal, Turn, TurnFault } from '@norikub/core/turn';
 
+import { toMove } from './drag.ts';
+import type { DropTarget } from './drag.ts';
 import { fitPile, takeFromPile } from './pile.ts';
 import type { Pile } from './pile.ts';
 import { dealRows, placeOnRack, reconcileRows } from './rack.ts';
@@ -147,6 +149,62 @@ export function moveTile(session: Session, m: Move, spot?: RackSpot): Session {
     rows = placeOnRack(rows, m.tileId, spot.row, spot.col);
   }
   return { ...session, turn: result.turn, rows, notes: [] };
+}
+
+/**
+ * Several tiles tapped and then sent somewhere together (Nora, 22 Nov 2026, KUB-2): tap a few
+ * tiles in the rack, tap New set, and they are a set. Each is still one engine move, in the
+ * order tapped, so the engine judges every one (invariant 1); the group goes all or none, so
+ * a refusal part-way leaves no half-moved group behind and says why.
+ *
+ * One tile alone is exactly a drop, splitting a run where it fits. A group is laid on the end
+ * of the set (`to-set`): which of three tiles should cut a run is not a question a tap can
+ * answer. A set is followed by a tile already in it, not by its index, because the engine
+ * drops a set its last tile leaves and the indices after it move up.
+ */
+export function moveTiles(
+  session: Session,
+  tileIds: readonly string[],
+  target: DropTarget,
+): Session {
+  const [first, ...rest] = tileIds;
+  if (first === undefined || session.turn === null) return session;
+  if (rest.length === 0) {
+    return moveTile(session, toMove(first, target), target.kind === 'rack' ? target : undefined);
+  }
+  let next = session;
+  for (let i = 0; i < tileIds.length; i++) {
+    const step = groupStep(next, tileIds, i, target);
+    if (step === null) return session;
+    next = moveTile(
+      next,
+      step,
+      target.kind === 'rack' ? { row: target.row, col: target.col + i } : undefined,
+    );
+    const refused = next.notes.find((note) => note.kind === 'refused');
+    if (refused !== undefined) return { ...session, notes: [refused] };
+  }
+  return next;
+}
+
+function groupStep(
+  session: Session,
+  tileIds: readonly string[],
+  i: number,
+  target: DropTarget,
+): Move | null {
+  const tileId = tileIds[i];
+  if (tileId === undefined) return null;
+  if (target.kind === 'rack') return { kind: 'to-rack', tileId };
+  if (i === 0) {
+    return target.kind === 'new-set'
+      ? { kind: 'to-new-set', tileId }
+      : { kind: 'to-set', tileId, set: target.set };
+  }
+  const anchor = tileIds[0];
+  const set = session.turn?.table.findIndex((tiles) => tiles.some((tile) => tile.id === anchor));
+  if (set === undefined || set === -1) return null;
+  return { kind: 'to-set', tileId, set };
 }
 
 export function finishTurn(session: Session): Session {

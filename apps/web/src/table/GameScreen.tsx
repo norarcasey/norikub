@@ -6,12 +6,13 @@ import type { Game, Status } from '@norikub/core/game';
 import { rackPenalty } from '@norikub/core/tiles';
 import type { Tile } from '@norikub/core/tiles';
 
-import { dropAttribute, toMove, useDrag } from './drag.ts';
+import { dropAttribute, ghostTransform, toMove, useDrag } from './drag.ts';
 import type { Drag, DropTarget } from './drag.ts';
 import {
   frameText,
   noteText,
   overText,
+  pickedText,
   refusalText,
   splitText,
   tileName,
@@ -19,7 +20,7 @@ import {
 } from './messages.ts';
 import { fitPile, pileSpot } from './pile.ts';
 import { FLIGHT_MS, usePlayback } from './playback.ts';
-import { PERSON, drawTile, finishTurn, moveTile, probe, undoTurn } from './session.ts';
+import { PERSON, drawTile, finishTurn, moveTile, moveTiles, probe, undoTurn } from './session.ts';
 import type { Session } from './session.ts';
 import './table.css';
 
@@ -215,7 +216,9 @@ export function GameScreen({
   onNewGame: () => void;
 }) {
   const { game, turn, notes, rows } = session;
-  const [selected, setSelected] = useState<string | null>(null);
+  // The tiles tapped, in the order tapped: one to move like a drop, or several to send
+  // somewhere together (KUB-2).
+  const [selected, setSelected] = useState<readonly string[]>([]);
   // While a bot's turn plays back, the screen shows the frame and takes no moves: the game
   // underneath is already at the person's turn, and a move made now would be made on a table
   // they cannot see.
@@ -224,7 +227,7 @@ export function GameScreen({
 
   const place = useCallback(
     (tileId: string, target: DropTarget) => {
-      setSelected(null);
+      setSelected([]);
       const spot = target.kind === 'rack' ? { row: target.row, col: target.col } : undefined;
       onChange(moveTile(session, toMove(tileId, target), spot));
     },
@@ -232,23 +235,46 @@ export function GameScreen({
   );
 
   const drag = useDrag({ onDrop: place });
+  const table = watching?.table ?? turn?.table ?? game.table;
+
+  const send = (target: DropTarget) => {
+    setSelected([]);
+    onChange(moveTiles(session, selected, target));
+  };
+  // A turn's buttons and a draw let the picked tiles go: they were picked for the table as it
+  // was, and a take-back or a new turn has put them somewhere else.
+  const act = (next: Session) => {
+    setSelected([]);
+    onChange(next);
+  };
 
   const live: TileEvents = {
     onPointerDown: drag.onPointerDown,
     onPointerMove: drag.onPointerMove,
     onPointerUp: drag.onPointerUp,
     onPointerCancel: drag.onPointerCancel,
+    // A tap on a tile picks it, or lets it go again. With tiles picked, a tap on a tile of
+    // another set plays them on that set: a full set is nearly all tiles, and its own few
+    // pixels of edge were the only place a tap could reach it (Nora, 22 Nov 2026). A tile of a
+    // set the picked tiles come from is picked too, so tiles can be gathered from one set.
     onTap: (tileId) => {
       if (drag.swallowClick()) return;
-      setSelected((current) => (current === tileId ? null : tileId));
+      if (selected.includes(tileId)) {
+        setSelected(selected.filter((id) => id !== tileId));
+        return;
+      }
+      const set = table.findIndex((tiles) => tiles.some((tile) => tile.id === tileId));
+      const pickedHere = table[set]?.some((tile) => selected.includes(tile.id)) ?? false;
+      if (set !== -1 && selected.length > 0 && !pickedHere) send({ kind: 'set', set });
+      else setSelected([...selected, tileId]);
     },
   };
   const events = watching === null ? live : INERT;
 
-  // Tap a tile, then tap where it goes: the same moves as a drag, for a keyboard or a hand
-  // that would rather not drag.
+  // Tap tiles, then tap where they go: the same moves as a drag, for a keyboard or a hand
+  // that would rather not drag, and the one way to play several tiles at once.
   const tapTarget = (target: DropTarget) => () => {
-    if (watching === null && selected !== null) place(selected, target);
+    if (watching === null && selected.length > 0) send(target);
   };
 
   // While a tile is in flight the engine is asked what it would say to letting go here, so a
@@ -274,7 +300,6 @@ export function GameScreen({
       note.kind === 'fault' && note.fault.kind === 'invalid-set' ? [note.fault.set] : [],
     ),
   );
-  const table = watching?.table ?? turn?.table ?? game.table;
   const rack = turn?.rack ?? game.players[PERSON]?.rack ?? [];
   const byId = new Map(rack.map((tile) => [tile.id, tile]));
   const lifted = drag.drag?.tileId ?? null;
@@ -293,7 +318,7 @@ export function GameScreen({
     tile,
     events,
     lifted: tile.id === lifted,
-    selected: tile.id === selected,
+    selected: selected.includes(tile.id),
     fresh:
       watching === null
         ? onTable && turn !== null && !startIds.has(tile.id)
@@ -334,7 +359,7 @@ export function GameScreen({
         <span>Pool: {poolCount}</span>
       </header>
 
-      <section className="table" aria-label="Table">
+      <section className="table" aria-label="Table" data-autoscroll>
         {table.map((set, index) => {
           const target: DropTarget = { kind: 'set', set: index };
           const verdict = judgeSet(set);
@@ -399,7 +424,7 @@ export function GameScreen({
                   transform: `rotate(${angle}deg)`,
                 }}
                 onClick={() => {
-                  if (watching === null) onChange(drawTile(session, pick));
+                  if (watching === null) act(drawTile(session, pick));
                 }}
               />
             );
@@ -430,7 +455,9 @@ export function GameScreen({
               ? refusalText(refusal)
               : split !== null && held !== undefined
                 ? splitText(held)
-                : notes.map(noteText).join(' ')}
+                : drag.drag === null && selected.length > 1
+                  ? pickedText(selected.length)
+                  : notes.map(noteText).join(' ')}
         </p>
 
         {watching !== null ? (
@@ -441,15 +468,15 @@ export function GameScreen({
           </div>
         ) : status.kind === 'over' ? null : (
           <div className="actions">
-            <button type="button" onClick={() => onChange(undoTurn(session))}>
+            <button type="button" onClick={() => act(undoTurn(session))}>
               Take back
             </button>
             {game.pool.length === 0 && (
-              <button type="button" onClick={() => onChange(drawTile(session))}>
+              <button type="button" onClick={() => act(drawTile(session))}>
                 Pass
               </button>
             )}
-            <button type="button" className="primary" onClick={() => onChange(finishTurn(session))}>
+            <button type="button" className="primary" onClick={() => act(finishTurn(session))}>
               End turn
             </button>
           </div>
@@ -474,7 +501,9 @@ export function GameScreen({
         ))}
       </section>
 
-      {drag.drag !== null && <Ghost drag={drag.drag} tile={findTile(drag.drag, rack, table)} />}
+      {drag.drag !== null && (
+        <Ghost drag={drag.drag} tile={findTile(drag.drag, rack, table)} ghostRef={drag.ghostRef} />
+      )}
     </div>
   );
 }
@@ -597,18 +626,30 @@ function Flight({ pick, to, face }: { pick: number; to: string; face: Tile | nul
   );
 }
 
-/** The tile under the finger. It takes no pointer events, so the drop target is found under it. */
-function Ghost({ drag, tile }: { drag: Drag; tile: Tile | undefined }) {
+/**
+ * The tile under the finger. It takes no pointer events, so the drop target is found under it.
+ * Between renders the drag moves it through `ghostRef`.
+ */
+function Ghost({
+  drag,
+  tile,
+  ghostRef,
+}: {
+  drag: Drag;
+  tile: Tile | undefined;
+  ghostRef: (element: HTMLElement | null) => void;
+}) {
   if (tile === undefined) return null;
   return (
     <div
+      ref={ghostRef}
       className="tile ghost"
       data-colour={tile.kind === 'joker' ? 'joker' : tile.colour}
       aria-hidden="true"
       style={{
         width: drag.width,
         height: drag.height,
-        transform: `translate(${drag.x - drag.grabX}px, ${drag.y - drag.grabY}px)`,
+        transform: ghostTransform(drag),
       }}
     >
       <TileFace tile={tile} />

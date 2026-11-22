@@ -6,6 +6,7 @@ import {
   finishTurn,
   fromGame,
   moveTile,
+  moveTiles,
   newSession,
   probe,
   undoTurn,
@@ -131,3 +132,56 @@ describe('a session', () => {
 function slots(...rows: string[][]): (string | null)[][] {
   return rows.map((row) => [...row, ...Array.from({ length: 10 - row.length }, () => null)]);
 }
+
+const ids = (tiles: readonly { id: string }[] | undefined) => tiles?.map((tile) => tile.id);
+
+describe('several tapped tiles sent together', () => {
+  it('make a new set, in the order tapped', () => {
+    const next = moveTiles(session(), ['red-13-a', 'blue-13-a', 'black-13-a'], {
+      kind: 'new-set',
+    });
+    expect(ids(next.turn?.table[2])).toEqual(['red-13-a', 'blue-13-a', 'black-13-a']);
+    expect(ids(next.turn?.rack)).toEqual(['black-2-a']);
+  });
+
+  it('go on the end of a set, unsplit', () => {
+    const next = moveTiles(session(), ['red-13-a', 'black-2-a'], { kind: 'set', set: 1 });
+    expect(ids(next.turn?.table[1])).toEqual([
+      'red-1-a',
+      'joker-a',
+      'red-3-a',
+      'red-13-a',
+      'black-2-a',
+    ]);
+  });
+
+  it('follow their set when the set before it empties', () => {
+    // The red 13 alone is set 3 and the blue 13 set 4; the red 13 leaving empties set 3, and
+    // set 4 becomes set 3 under the black 13 on its way.
+    const lone = moveTiles(session(), ['red-13-a'], { kind: 'new-set' });
+    const two = moveTiles(lone, ['blue-13-a'], { kind: 'new-set' });
+    const next = moveTiles(two, ['red-13-a', 'black-13-a'], { kind: 'set', set: 3 });
+    expect(next.turn?.table).toHaveLength(3);
+    expect(ids(next.turn?.table[2])).toEqual(['blue-13-a', 'red-13-a', 'black-13-a']);
+  });
+
+  it('go all or none: one refused, none moved, and the refusal said', () => {
+    const s = moveTiles(session(), ['red-13-a'], { kind: 'new-set' });
+    const next = moveTiles(s, ['red-13-a', 'orange-13-a'], { kind: 'rack', row: 0, col: 0 });
+    expect(next.turn).toBe(s.turn);
+    expect(next.notes).toEqual([
+      { kind: 'refused', refusal: { kind: 'table-tile-to-rack', tileId: 'orange-13-a' } },
+    ]);
+  });
+
+  it('go into the rack side by side from the slot tapped', () => {
+    const s = moveTiles(session(), ['red-13-a', 'blue-13-a'], { kind: 'new-set' });
+    const next = moveTiles(s, ['blue-13-a', 'red-13-a'], { kind: 'rack', row: 2, col: 4 });
+    expect(next.rows[2]?.slice(4, 6)).toEqual(['blue-13-a', 'red-13-a']);
+  });
+
+  it('do nothing with none tapped', () => {
+    const s = session();
+    expect(moveTiles(s, [], { kind: 'new-set' })).toBe(s);
+  });
+});
