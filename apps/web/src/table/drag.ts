@@ -21,7 +21,8 @@ export function dropAttribute(target: DropTarget): string {
 }
 
 export function toMove(tileId: string, target: DropTarget): Move {
-  if (target.kind === 'set') return { kind: 'to-set', tileId, set: target.set };
+  // A person's drop on a set may split a run (KUB-23); the engine decides whether it does.
+  if (target.kind === 'set') return { kind: 'onto-set', tileId, set: target.set };
   if (target.kind === 'new-set') return { kind: 'to-new-set', tileId };
   return { kind: 'to-rack', tileId };
 }

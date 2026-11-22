@@ -25,6 +25,62 @@ function ended(turn: Turn): Game {
 const toNew = (tileId: string): Move => ({ kind: 'to-new-set', tileId });
 const toSet = (tileId: string, set: number): Move => ({ kind: 'to-set', tileId, set });
 const toRack = (tileId: string): Move => ({ kind: 'to-rack', tileId });
+const onto = (tileId: string, set: number): Move => ({ kind: 'onto-set', tileId, set });
+
+describe('a tile let go on a set', () => {
+  const game = layout(
+    [{ rack: ['red-5-b', 'red-8-a', 'blue-1-a'], hasMelded: true }, { rack: [] }],
+    [
+      ['blue-9-a', 'blue-10-a', 'blue-11-a'],
+      ['red-3-a', 'red-4-a', 'red-5-a', 'red-6-a', 'red-7-a'],
+      ['black-1-a', 'black-2-a', 'black-3-a'],
+    ],
+  );
+
+  it('splits a run the tile fits into, the halves side by side in its place', () => {
+    const turn = play(startTurn(game), onto('red-5-b', 1));
+    expect(turn.table).toEqual([
+      ts('blue-9-a', 'blue-10-a', 'blue-11-a'),
+      ts('red-3-a', 'red-4-a', 'red-5-b'),
+      ts('red-5-a', 'red-6-a', 'red-7-a'),
+      ts('black-1-a', 'black-2-a', 'black-3-a'),
+    ]);
+    const next = ended(turn);
+    expect(next.players[0]?.rack).toEqual(ts('red-8-a', 'blue-1-a'));
+  });
+
+  it('adds a tile that extends the run to its end, as to-set does', () => {
+    const turn = play(startTurn(game), onto('red-8-a', 1));
+    expect(turn.table[1]).toEqual(
+      ts('red-3-a', 'red-4-a', 'red-5-a', 'red-6-a', 'red-7-a', 'red-8-a'),
+    );
+    expect(turn.table).toHaveLength(3);
+  });
+
+  it('adds a tile that cannot split the run cleanly to its end, refusing nothing', () => {
+    const turn = play(startTurn(game), onto('blue-1-a', 1));
+    expect(turn.table[1]?.at(-1)).toEqual(ts('blue-1-a')[0]);
+    expect(turn.table).toHaveLength(3);
+  });
+
+  it('keeps the set it names when the tile’s own set empties on the way', () => {
+    const lone = play(startTurn(game), toNew('red-5-b'));
+    const turn = play(lone, onto('red-5-b', 1));
+    expect(turn.table.map((set) => set.length)).toEqual([3, 3, 3, 3]);
+  });
+
+  it('refuses a set that is not there', () => {
+    expect(move(startTurn(game), onto('red-5-b', 9))).toEqual({
+      ok: false,
+      refusal: { kind: 'no-such-set', set: 9 },
+    });
+  });
+
+  it('is taken back whole', () => {
+    const turn = play(startTurn(game), onto('red-5-b', 1));
+    expect(takeBack(turn).table).toEqual(game.table);
+  });
+});
 
 describe('the first meld', () => {
   it('counts at 30 or more from the rack', () => {

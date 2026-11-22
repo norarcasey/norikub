@@ -1,6 +1,6 @@
 import { FIRST_MELD_POINTS, draw, finish, nextSeat } from './game.ts';
 import type { DrawResult, Game } from './game.ts';
-import { judgeSet } from './sets.ts';
+import { judgeSet, splitFor } from './sets.ts';
 import type { Tile } from './tiles.ts';
 
 /**
@@ -17,8 +17,15 @@ export type Turn = {
   readonly table: readonly (readonly Tile[])[];
 };
 
+/**
+ * `to-set` puts the tile on the end of the set, whatever it makes: the literal move, which the
+ * bots use. `onto-set` is a tile let go on a set by a person: the same, except that when the set
+ * is a run the tile does not extend but would fit by splitting it (`splitFor`), the run is split
+ * there, its left half keeping the set's place and its right half coming next (KUB-23).
+ */
 export type Move =
   | { readonly kind: 'to-set'; readonly tileId: string; readonly set: number }
+  | { readonly kind: 'onto-set'; readonly tileId: string; readonly set: number }
   | { readonly kind: 'to-new-set'; readonly tileId: string }
   | { readonly kind: 'to-rack'; readonly tileId: string };
 
@@ -63,7 +70,7 @@ export function move(turn: Turn, m: Move): MoveResult {
   const setIndex = turn.table.findIndex((set) => set.some((tile) => tile.id === m.tileId));
   const tile = turn.rack[inRack] ?? turn.table[setIndex]?.find((t) => t.id === m.tileId);
   if (tile === undefined) return { ok: false, refusal: { kind: 'no-such-tile', tileId: m.tileId } };
-  if (m.kind === 'to-set' && turn.table[m.set] === undefined) {
+  if ((m.kind === 'to-set' || m.kind === 'onto-set') && turn.table[m.set] === undefined) {
     return { ok: false, refusal: { kind: 'no-such-set', set: m.set } };
   }
   if (m.kind === 'to-rack' && inRack === -1 && beganOnTable(turn, tile.id)) {
@@ -78,6 +85,12 @@ export function move(turn: Turn, m: Move): MoveResult {
   if (m.kind === 'to-rack') rack.push(tile);
   if (m.kind === 'to-new-set') table.push([tile]);
   if (m.kind === 'to-set') table[m.set] = [...(table[m.set] ?? []), tile];
+  if (m.kind === 'onto-set') {
+    const target = table[m.set] ?? [];
+    const split = splitFor(target, tile);
+    if (split === null) table[m.set] = [...target, tile];
+    else table.splice(m.set, 1, [...split.left], [...split.right]);
+  }
   return { ok: true, turn: { ...turn, rack, table: table.filter((set) => set.length > 0) } };
 }
 

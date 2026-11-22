@@ -1,12 +1,12 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { ReactNode, PointerEvent as ReactPointerEvent } from 'react';
 
-import { arrangeSet, judgeSet } from '@norikub/core/sets';
+import { arrangeSet, judgeSet, splitFor } from '@norikub/core/sets';
 import type { Tile } from '@norikub/core/tiles';
 
 import { dropAttribute, toMove, useDrag } from './drag.ts';
 import type { Drag, DropTarget } from './drag.ts';
-import { frameText, noteText, refusalText, tileName } from './messages.ts';
+import { frameText, noteText, refusalText, splitText, tileName } from './messages.ts';
 import { FLIGHT_MS, usePlayback } from './playback.ts';
 import { PERSON, drawTile, finishTurn, moveTile, probe, undoTurn } from './session.ts';
 import type { Session } from './session.ts';
@@ -199,7 +199,13 @@ export function GameScreen({
       : null;
 
   const zoneState = (target: DropTarget) =>
-    sameTarget(hovering, target) ? (refusal === null ? 'over' : 'refused') : undefined;
+    sameTarget(hovering, target)
+      ? refusal !== null
+        ? 'refused'
+        : split !== null
+          ? 'split'
+          : 'over'
+      : undefined;
 
   const startIds = new Set(turn?.start.table.flat().map((tile) => tile.id) ?? []);
   const invalid = new Set(
@@ -211,6 +217,16 @@ export function GameScreen({
   const rack = turn?.rack ?? game.players[PERSON]?.rack ?? [];
   const byId = new Map(rack.map((tile) => [tile.id, tile]));
   const lifted = drag.drag?.tileId ?? null;
+  // Held over a run it would split, the engine says where (`splitFor`), and the set shows the
+  // cut before the drop (KUB-23).
+  const held = drag.drag === null ? undefined : findTile(drag.drag, rack, table);
+  const split =
+    held !== undefined && hovering?.kind === 'set' && refusal === null
+      ? splitFor(
+          (table[hovering.set] ?? []).filter((tile) => tile.id !== held.id),
+          held,
+        )
+      : null;
   // A tile on the table that was not there when the turn began came from the rack this turn.
   const tileProps = (tile: Tile, onTable: boolean): TileProps => ({
     tile,
@@ -272,9 +288,14 @@ export function GameScreen({
               data-faulted={invalid.has(index) || undefined}
               onClick={tapTarget(target)}
             >
-              {arrangeSet(set).map((tile) => (
-                <TileButton key={tile.id} {...tileProps(tile, true)} />
-              ))}
+              {withCut(
+                arrangeSet(set).map((tile) => ({
+                  id: tile.id,
+                  node: <TileButton key={tile.id} {...tileProps(tile, true)} />,
+                })),
+                hovering?.kind === 'set' && hovering.set === index ? (split?.at ?? null) : null,
+                lifted,
+              )}
             </div>
           );
         })}
@@ -333,7 +354,9 @@ export function GameScreen({
           ? frameText(watching)
           : drag.drag !== null && refusal !== null
             ? refusalText(refusal)
-            : notes.map(noteText).join(' ')}
+            : split !== null && held !== undefined
+              ? splitText(held)
+              : notes.map(noteText).join(' ')}
       </p>
 
       {watching !== null ? (
@@ -388,6 +411,27 @@ const INERT: TileEvents = {
   onPointerCancel: () => {},
   onTap: () => {},
 };
+
+/**
+ * A set's tiles with the mark of a cut before the `at`th of them, counted among the tiles that
+ * stay put, as `splitFor` counts them: the held tile, if it is one of these, is not.
+ */
+function withCut(
+  tiles: readonly { id: string; node: ReactNode }[],
+  at: number | null,
+  lifted: string | null,
+): ReactNode[] {
+  const out: ReactNode[] = [];
+  let staying = 0;
+  for (const tile of tiles) {
+    if (tile.id !== lifted) {
+      if (staying === at) out.push(<span key="cut" className="set-cut" aria-hidden="true" />);
+      staying++;
+    }
+    out.push(tile.node);
+  }
+  return out;
+}
 
 function findTile(
   drag: Drag,

@@ -9,6 +9,10 @@ export function tileName(tile: Tile): string {
   return tile.kind === 'joker' ? 'joker' : `${tile.colour} ${tile.value}`;
 }
 
+export function splitText(tile: Tile): string {
+  return `Let go to split the run and put the ${tileName(tile)} on the end of the first half.`;
+}
+
 export function refusalText(refusal: MoveRefusal): string {
   switch (refusal.kind) {
     case 'table-tile-to-rack':

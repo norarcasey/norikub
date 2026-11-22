@@ -167,6 +167,72 @@ describe('the table screen', () => {
   });
 });
 
+// A red 3-4-5-6-7 on the table and a second red 5 in the rack: the split the ticket is about.
+function SplitHarness() {
+  const [session, setSession] = useState<Session>(() =>
+    fromGame(
+      layout(
+        [
+          { rack: ['red-5-b', 'red-8-a'], hasMelded: true },
+          { rack: ['blue-1-b'] },
+          { rack: ['black-1-b'] },
+        ],
+        [['red-3-a', 'red-4-a', 'red-5-a', 'red-6-a', 'red-7-a']],
+      ),
+      [],
+    ),
+  );
+  return <GameScreen session={session} onChange={setSession} />;
+}
+
+const setLabels = (n: number) =>
+  within(screen.getByRole('group', { name: `Set ${n}` }))
+    .getAllByRole('button')
+    .map((tile) => tile.getAttribute('aria-label'));
+
+describe('splitting a run', () => {
+  it('shows where the run will be cut while the tile is held over it', () => {
+    render(<SplitHarness />);
+    const run = screen.getByRole('group', { name: 'Set 1' });
+    dragTile(rack().getByRole('button', { name: 'red 5' }), run, false);
+    expect(run.dataset.zone).toBe('split');
+    expect(screen.getByRole('status').textContent).toMatch(/split the run/);
+    const cut = run.querySelector('.set-cut');
+    expect(cut?.previousElementSibling?.getAttribute('aria-label')).toBe('red 4');
+    expect(cut?.nextElementSibling?.getAttribute('aria-label')).toBe('red 5');
+  });
+
+  it('splits the run when the tile is let go on it, and takes it back whole', () => {
+    render(<SplitHarness />);
+    dragTile(
+      rack().getByRole('button', { name: 'red 5' }),
+      screen.getByRole('group', { name: 'Set 1' }),
+    );
+    expect(setLabels(1)).toEqual(['red 3', 'red 4', 'red 5']);
+    expect(setLabels(2)).toEqual(['red 5', 'red 6', 'red 7']);
+    fireEvent.click(screen.getByRole('button', { name: 'Take back' }));
+    expect(setLabels(1)).toEqual(['red 3', 'red 4', 'red 5', 'red 6', 'red 7']);
+    expect(screen.queryByRole('group', { name: 'Set 2' })).toBeNull();
+  });
+
+  it('splits by tapping the tile, then the run', () => {
+    render(<SplitHarness />);
+    fireEvent.click(rack().getByRole('button', { name: 'red 5' }));
+    fireEvent.click(screen.getByRole('group', { name: 'Set 1' }));
+    expect(setLabels(2)).toEqual(['red 5', 'red 6', 'red 7']);
+  });
+
+  it('only extends a run the tile extends, with no cut shown', () => {
+    render(<SplitHarness />);
+    const run = screen.getByRole('group', { name: 'Set 1' });
+    dragTile(rack().getByRole('button', { name: 'red 8' }), run, false);
+    expect(run.dataset.zone).toBe('over');
+    expect(run.querySelector('.set-cut')).toBeNull();
+    fireEvent.pointerUp(rack().getByRole('button', { name: 'red 8' }), { pointerId: 1 });
+    expect(setLabels(1)).toEqual(['red 3', 'red 4', 'red 5', 'red 6', 'red 7', 'red 8']);
+  });
+});
+
 // Seat 1 has melded and lays a red 4-5-6, then adds the orange 9 to the run on the table; seat 2
 // has not melded and draws. Then it is the person's turn.
 function BotsFirstHarness() {

@@ -92,3 +92,34 @@ export function arrangeSet(tiles: readonly Tile[]): readonly Tile[] {
   }
   return out;
 }
+
+/** A run split in two for a tile, as the two sets it becomes and where it was cut. */
+export type Split = {
+  /** How many tiles of the run, in `arrangeSet` order, stay in the left half. */
+  readonly at: number;
+  readonly left: readonly Tile[];
+  readonly right: readonly Tile[];
+};
+
+/**
+ * Where a valid run can be cut so that `tile` fits on the end of one half and both halves are
+ * sets: a red 5 into red 3-4-5-6-7 makes 3-4-5 and 5-6-7. Null when the tile extends the run
+ * whole (that is not a split), when the set is not a valid run, or when no cut leaves two
+ * valid sets.
+ *
+ * The tile always ends the left half. Starting the right half instead never finds a cut this
+ * misses: a tile that could start `right` duplicates the last of `left`, so the cut one tile
+ * further left, with the tile ending that half, leaves the same two sets read the other way.
+ */
+export function splitFor(run: readonly Tile[], tile: Tile): Split | null {
+  const verdict = judgeSet(run);
+  if (!verdict.valid || verdict.kind !== 'run') return null;
+  if (judgeSet([...run, tile]).valid) return null;
+  const order = arrangeSet(run);
+  for (let at = 1; at < order.length; at++) {
+    const left = [...order.slice(0, at), tile];
+    const right = order.slice(at);
+    if (judgeSet(left).valid && judgeSet(right).valid) return { at, left, right };
+  }
+  return null;
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ts } from './fixtures.test-helpers.ts';
-import { arrangeSet, judgeSet } from './sets.ts';
+import { arrangeSet, judgeSet, splitFor } from './sets.ts';
 
 describe('a run', () => {
   it('is three or more consecutive numbers of one colour', () => {
@@ -176,5 +176,57 @@ describe('the order a set is read in', () => {
   it('leaves a set that is not valid yet in the order it was dropped', () => {
     const dropped = ts('red-9-a', 'red-3-a', 'blue-1-a');
     expect(arrangeSet(dropped)).toBe(dropped);
+  });
+});
+
+describe('splitting a run for a tile', () => {
+  const run = ts('red-3-a', 'red-4-a', 'red-5-a', 'red-6-a', 'red-7-a');
+  const [red5] = ts('red-5-b');
+
+  it('cuts where the tile ends one half and both halves are sets', () => {
+    if (red5 === undefined) throw new Error('no tile');
+    expect(splitFor(run, red5)).toEqual({
+      at: 2,
+      left: ts('red-3-a', 'red-4-a', 'red-5-b'),
+      right: ts('red-5-a', 'red-6-a', 'red-7-a'),
+    });
+  });
+
+  it('splits a run with a joker in it, the joker staying where it stands', () => {
+    // 2-3-★-5-6-7 with the joker as the 4; a second 5 ends 2-3-★ and leaves 5-6-7.
+    const withJoker = ts('red-2-a', 'red-3-a', 'joker-a', 'red-5-a', 'red-6-a', 'red-7-a');
+    if (red5 === undefined) throw new Error('no tile');
+    expect(splitFor(withJoker, red5)).toEqual({
+      at: 3,
+      left: ts('red-2-a', 'red-3-a', 'joker-a', 'red-5-b'),
+      right: ts('red-5-a', 'red-6-a', 'red-7-a'),
+    });
+  });
+
+  it('finds the cut whatever order the run’s tiles were laid in', () => {
+    const laid = ts('red-7-a', 'red-3-a', 'red-6-a', 'red-4-a', 'red-5-a');
+    if (red5 === undefined) throw new Error('no tile');
+    expect(splitFor(laid, red5)?.right).toEqual(ts('red-5-a', 'red-6-a', 'red-7-a'));
+  });
+
+  it('does not split for a tile that extends the run whole', () => {
+    const [red8] = ts('red-8-a');
+    if (red8 === undefined) throw new Error('no tile');
+    expect(splitFor(run, red8)).toBeNull();
+  });
+
+  it('does not split when no cut leaves two sets', () => {
+    const short = ts('red-3-a', 'red-4-a', 'red-5-a', 'red-6-a');
+    const [blue5] = ts('blue-5-a');
+    if (red5 === undefined || blue5 === undefined) throw new Error('no tile');
+    expect(splitFor(short, red5)).toBeNull();
+    expect(splitFor(run, blue5)).toBeNull();
+  });
+
+  it('splits only runs', () => {
+    const group = ts('red-5-a', 'blue-5-a', 'black-5-a');
+    if (red5 === undefined) throw new Error('no tile');
+    expect(splitFor(group, red5)).toBeNull();
+    expect(splitFor(ts('red-3-a', 'red-9-a'), red5)).toBeNull();
   });
 });

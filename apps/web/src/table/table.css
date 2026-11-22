@@ -102,6 +102,21 @@ body {
   background: rgb(255 138 128 / 0.15);
 }
 
+[data-zone='split'] {
+  border-color: var(--ok);
+  border-style: solid;
+  background: rgb(126 215 165 / 0.12);
+}
+
+/* Where a run will be cut when the held tile is let go on it (KUB-23). */
+.set-cut {
+  align-self: stretch;
+  width: 4px;
+  margin: 0 4px;
+  border-radius: 2px;
+  background: var(--ok);
+}
+
 .notes {
   min-height: 1.4em;
   margin: 0;
