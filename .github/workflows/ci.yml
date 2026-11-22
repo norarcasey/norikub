@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    # Concurrency is per job, never for the whole workflow. A second push makes the first
+    # push's gate worthless, so that is cancelled; but a workflow-level group would cancel a
+    # deploy half-way through its upload too, and a half-finished deploy is worse than a
+    # late one. A deploy job takes its own group with `cancel-in-progress: false`.
+    concurrency:
+      group: gate-${{ github.ref }}
+      cancel-in-progress: true
+    # The scaffold as cut: gate 6.2s and build 0.7s on an M3 Max with a warm store (median of
+    # three, 23 Sep 2026). Ten minutes is headroom for a cold two-core runner, not a
+    # prediction of one. Replace this with the first real CI number, and revisit it as the
+    # suite grows — a cap that was right in week one and wrong by month three kills a run,
+    # and a killed gate skips the deploy behind it.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+
+      # One command, in the order CI runs it, so `pnpm gate` on a laptop and this job cannot
+      # disagree about what passing means.
+      - run: pnpm gate
+
+      # Not part of `gate` because it is the slowest step and the one least often broken by
+      # an edit; still a break when it stops working.
+      - run: pnpm build
+
+  # The only path to production: `git.deploymentEnabled.main` is false in vercel.json, so
+  # Vercel's own git integration never ships main — CruciNora once went out 33 s ahead of
+  # its gated deploy that way. A skipped gate job skips this too.
+  deploy:
+    needs: [gate]
+    # Off until the repository variable ENABLE_VERCEL_DEPLOY is 'true', which is set once the
+    # secrets below exist (docs/vercel.md). Until then the job is skipped and CI stays green
+    # — and Noradar reports the deploy as skipped, which is the truth, rather than a red run that is not.
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      vars.ENABLE_VERCEL_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    # Its own group, never cancelled: a second push waits for this upload to finish rather
+    # than killing it half-way.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    timeout-minutes: 15
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+
+      # Pinned with the rest of the toolchain rather than `@latest`, so a CLI release cannot
+      # change what a deploy does between two pushes. 58.9.5 is what `vercel build` was
+      # measured with (SKL-03).
+      - run: pnpm add -g vercel@58.9.5
+      - run: vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+      # Vercel typechecks every function again, its own way, and by default prints what it
+      # finds and ships anyway: Dinora's deploys carried 21 such errors on green runs until
+      # its OPS-03, all false, so a real one would have gone out unseen. This makes them
+      # refuse the deploy. The gate's typecheck stays the one that says why.
+      - run: vercel build --prod --token="$VERCEL_TOKEN"
+        env:
+          EXPERIMENTAL_NODE_TYPESCRIPT_ERRORS: '1'
+      - run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"

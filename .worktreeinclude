@@ -1,0 +1,8 @@
+# Gitignored files Claude Code copies into a new worktree under .claude/worktrees/. Only files
+# that are ignored AND listed here are copied; tracked files come from git as usual.
+#
+# The root env files only, anchored. An app's own derived env (apps/web/.env.local, written by
+# `pnpm db:env` from the stack it points at) is deliberately not copied: in a worktree it
+# would point at the main checkout's database. A worktree writes its own.
+/.env
+/.env.*

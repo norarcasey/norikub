@@ -1,0 +1,38 @@
+{
+  "name": "norikub",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "gate": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "verify": "pnpm gate && pnpm build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p packages/core && tsc --noEmit -p apps/web && tsc --noEmit -p apps/mac",
+    "test": "vitest run --coverage",
+    "dev": "pnpm --filter @norikub/web dev",
+    "build": "pnpm --filter @norikub/web build",
+    "app:install": "node --experimental-strip-types --no-warnings apps/mac/src/install.ts",
+    "app:check": "node --experimental-strip-types --no-warnings apps/mac/src/install.ts --check",
+    "app:uninstall": "node --experimental-strip-types --no-warnings apps/mac/src/install.ts --uninstall"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "~24.19.0",
+    "@vitest/coverage-v8": "^5.0.1",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "jsdom": "^30.1.1",
+    "prettier": "^3.9.9",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.1",
+    "undici-types": ">=7.24.0 <7.24.7",
+    "vitest": "^5.0.1"
+  }
+}
