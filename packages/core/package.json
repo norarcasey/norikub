@@ -4,7 +4,12 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./parse": "./src/parse.ts"
+    "./game": "./src/game.ts",
+    "./parse": "./src/parse.ts",
+    "./random": "./src/random.ts",
+    "./sets": "./src/sets.ts",
+    "./tiles": "./src/tiles.ts",
+    "./turn": "./src/turn.ts"
   },
   "dependencies": {
     "zod": "^4.6.5"
