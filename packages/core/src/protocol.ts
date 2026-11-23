@@ -38,8 +38,8 @@ export const SITE_REFUSED = 'site';
 
 /**
  * What a seat sends over its socket: `deal`, the first seat's once two or more are seated,
- * `cancel`, any seat's, which calls the table off for everyone (`KUB-52`), `add-bot`, the first
- * seat's before the deal (`KUB-36`), and the four
+ * `cancel`, any seat's, which calls the table off for everyone (`KUB-52`), `add-bot` and
+ * `remove-bot`, the first seat's before the deal (`KUB-36`, `KUB-54`), and the four
  * messages of a turn being played (`apply` in `table.ts`), from the seat whose turn it is.
  * `draw-for-away` is a seat's answer to "Draw a tile for <name>?" (`KUB-37`, `away.ts`): yes,
  * or no to take back a yes.
@@ -52,6 +52,11 @@ export const tableClientMessageSchema = z.discriminatedUnion('type', [
    * plays, and the name of the character it plays as, which the page picks from its cast.
    */
   z.object({ type: z.literal('add-bot'), level: levelSchema, name: displayNameSchema }).readonly(),
+  /**
+   * The first seat takes a bot off again before the deal (`KUB-54`); every later seat moves up
+   * one, and each page learns its new seat from its next view's `you`.
+   */
+  z.object({ type: z.literal('remove-bot'), seat: z.number().int().min(0) }).readonly(),
   z.object({ type: z.literal('draw-for-away'), yes: z.boolean() }).readonly(),
   ...turnMessageSchema.options,
 ]);

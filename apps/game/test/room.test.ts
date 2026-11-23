@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import { addBot } from '../../../packages/core/src/table.ts';
 import { isStale, presence, STALE_AFTER_MS } from '../src/presence.ts';
-import { joinRoom, newRoom, readRoom, seatOf, type Room } from '../src/room.ts';
+import {
+  joinRoom,
+  newRoom,
+  readRoom,
+  removeBotFromRoom,
+  seatAfterRemoving,
+  seatOf,
+  type Room,
+} from '../src/room.ts';
 
 function sat(room: Room, token: string, name: string): Room {
   const joined = joinRoom(room, token, name);
@@ -55,6 +63,30 @@ describe('the room', () => {
     // A room stored before bots could sit has none.
     const before = { table: { phase: 'seating', names: ['Nora'] }, tokens: nora.tokens };
     expect(readRoom(JSON.stringify(before))).toEqual(nora);
+  });
+
+  it('moves every token after a bot taken off up with its seat (KUB-54)', () => {
+    const nora = sat(newRoom(), 't-nora', 'Nora');
+    const withBot = addBot(nora.table, 0, 'medium', 'Erik');
+    if (!withBot.ok) throw new Error('no bot');
+    const room = sat(sat({ ...nora, table: withBot.value }, 't-kit', 'Kit'), 't-bo', 'Bo');
+    const removed = removeBotFromRoom(room, 0, 1);
+    if (!removed.ok) throw new Error('not removed');
+    expect(removed.value.tokens).toEqual(['t-nora', 't-kit', 't-bo']);
+    expect(removed.value.table.names).toEqual(['Nora', 'Kit', 'Bo']);
+    // Every friend's token opens the seat that is now theirs.
+    const holders = [
+      ['t-nora', 'Nora'],
+      ['t-kit', 'Kit'],
+      ['t-bo', 'Bo'],
+    ] as const;
+    for (const [token, name] of holders) {
+      const seat = seatOf(removed.value, token);
+      expect(seat === null ? null : removed.value.table.names[seat]).toBe(name);
+    }
+    expect([0, 2, 3].map((seat) => seatAfterRemoving(seat, 1))).toEqual([0, 1, 2]);
+    // Refused by the core, the room is left as it was.
+    expect(removeBotFromRoom(room, 2, 1).ok).toBe(false);
   });
 
   it('throws on a stored row that is not a room, rather than starting over on top of it', () => {

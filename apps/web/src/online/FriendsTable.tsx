@@ -24,6 +24,7 @@ import {
   received,
   reconnected,
   sendAddBot,
+  sendRemoveBot,
   sendAwayVote,
   sendCancel,
   sendDeal,
@@ -179,6 +180,7 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
         notes={friends.notes}
         status={status}
         onAddBot={(level) => dispatch(sendAddBot(friends, level))}
+        onRemoveBot={(seat) => dispatch(sendRemoveBot(friends, seat))}
         onDeal={() => dispatch(sendDeal(friends))}
         onCancel={() => dispatch(sendCancel(friends))}
       />
@@ -480,6 +482,7 @@ function Seating({
   notes,
   status,
   onAddBot,
+  onRemoveBot,
   onDeal,
   onCancel,
 }: {
@@ -492,6 +495,8 @@ function Seating({
   notes: Friends['notes'];
   status: ReactNode;
   onAddBot: (level: Level) => void;
+  /** Takes the bot in a seat off again, before the deal (`KUB-54`). */
+  onRemoveBot: (seat: number) => void;
   onDeal: () => void;
   onCancel: () => void;
 }) {
@@ -523,6 +528,16 @@ function Seating({
             {seat === you ? ' (you)' : ''}
             {bots[seat] ? ` · ${bots[seat]} bot` : ''}
             {away[seat] === true ? ' · away' : ''}
+            {you === 0 && bots[seat] ? (
+              <button
+                type="button"
+                className="remove-bot"
+                aria-label={`Take ${name} off the table`}
+                onClick={() => onRemoveBot(seat)}
+              >
+                Take off
+              </button>
+            ) : null}
           </li>
         ))}
       </ol>

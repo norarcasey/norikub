@@ -92,6 +92,8 @@ export const tableRefusalSchema = z.discriminatedUnion('kind', [
   /** Bots are seated by the one who deals, as the dealer sets the table (`KUB-36`). */
   z.object({ kind: z.literal('only-the-first-seat-adds-bots') }).readonly(),
   z.object({ kind: z.literal('no-such-seat') }).readonly(),
+  /** Taking a bot off a seat a person holds, or no one (`KUB-54`). */
+  z.object({ kind: z.literal('not-a-bot') }).readonly(),
   z.object({ kind: z.literal('not-your-turn') }).readonly(),
   z.object({ kind: z.literal('game-over') }).readonly(),
   z.object({ kind: z.literal('cancelled') }).readonly(),
@@ -146,6 +148,27 @@ export function addBot(table: Table, seat: number, level: Level, name: string): 
   if (!sat.ok) return sat;
   const bots = [...table.bots, { seat: sat.value.seat, level }];
   return { ok: true, value: { ...sat.value.table, bots } };
+}
+
+/**
+ * The first seat takes the bot in `botSeat` off the table again, before the deal (`KUB-54`),
+ * for a level tapped by mistake. Every seat after it moves up one, friends' and bots' alike:
+ * allowing only the last seat to go would refuse the usual case, a bot added before a friend
+ * sat down after it. Before the deal a seat number is nothing but a place in `names`: no game,
+ * no turn and no stall holds one, so renumbering moves nothing else in the table. The host
+ * moves its tokens and open sockets with it (`room.ts`, `removeBotFromRoom`).
+ */
+export function removeBot(table: Table, seat: number, botSeat: number): Outcome<Table> {
+  if (table.phase === 'cancelled') return refused({ kind: 'cancelled' });
+  if (table.phase !== 'seating') return refused({ kind: 'already-dealt' });
+  if (seat !== 0) return refused({ kind: 'only-the-first-seat-adds-bots' });
+  if (botAt(table, botSeat) === null) return refused({ kind: 'not-a-bot' });
+  const names = table.names.filter((_, at) => at !== botSeat);
+  const bots = table.bots.flatMap((bot) => {
+    if (bot.seat === botSeat) return [];
+    return [bot.seat > botSeat ? { ...bot, seat: bot.seat - 1 } : bot];
+  });
+  return { ok: true, value: { ...table, names, bots } };
 }
 
 /** The level of the bot in `seat`, or null when a person sits there. */

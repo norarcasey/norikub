@@ -513,3 +513,15 @@ export function sendAddBot(state: Friends, level: Level): Sent {
     send: [{ type: 'add-bot', level, name }],
   };
 }
+
+/**
+ * The first seat takes the bot in `seat` off again before the deal (`KUB-54`). Every seat
+ * after it moves up one; this page learns its own from the next view's `you`, as it always
+ * does, so nothing is shown ahead of the host.
+ */
+export function sendRemoveBot(state: Friends, seat: number): Sent {
+  return {
+    state: { ...state, unanswered: state.unanswered + 1, notes: [] },
+    send: [{ type: 'remove-bot', seat }],
+  };
+}

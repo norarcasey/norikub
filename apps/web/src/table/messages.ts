@@ -96,7 +96,9 @@ export function tableRefusalText(refusal: TableRefusal): string {
     case 'only-the-first-seat-deals':
       return 'The first player to sit down deals.';
     case 'only-the-first-seat-adds-bots':
-      return 'The first player to sit down adds the bots.';
+      return 'The first player to sit down adds and removes the bots.';
+    case 'not-a-bot':
+      return 'That seat is not a bot’s.';
     case 'no-such-seat':
       return 'You have no seat at this table.';
     case 'not-your-turn':

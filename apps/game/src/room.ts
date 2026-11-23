@@ -2,7 +2,13 @@ import { z } from 'zod';
 
 import { stallSchema } from '../../../packages/core/src/away.ts';
 import { parse } from '../../../packages/core/src/parse.ts';
-import { newTable, sitDown, tableSchema, type Outcome } from '../../../packages/core/src/table.ts';
+import {
+  newTable,
+  removeBot,
+  sitDown,
+  tableSchema,
+  type Outcome,
+} from '../../../packages/core/src/table.ts';
 
 /**
  * What one table's Durable Object stores, as one row: the table (seats, the game, the turn in
@@ -57,6 +63,23 @@ export function joinRoom(
     ok: true,
     value: { room: { ...room, table: sat.value.table, tokens }, seat: sat.value.seat },
   };
+}
+
+/**
+ * Takes the bot in `botSeat` off for the first seat (`KUB-54`). The core moves every later
+ * seat up one; the tokens move with them, so each friend's token still opens the seat that is
+ * now theirs. The host moves its open sockets the same way.
+ */
+export function removeBotFromRoom(room: Room, seat: number, botSeat: number): Outcome<Room> {
+  const removed = removeBot(room.table, seat, botSeat);
+  if (!removed.ok) return removed;
+  const tokens = room.tokens.filter((_, at) => at !== botSeat);
+  return { ok: true, value: { ...room, table: removed.value, tokens } };
+}
+
+/** The seat a socket held before `botSeat` was taken off: one up for every seat after it. */
+export function seatAfterRemoving(seat: number, botSeat: number): number {
+  return seat > botSeat ? seat - 1 : seat;
 }
 
 /** The seat `token` was given, or null for a token this table never gave out. */

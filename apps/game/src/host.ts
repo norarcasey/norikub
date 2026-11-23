@@ -23,7 +23,14 @@ import {
   type Drew,
 } from '../../../packages/core/src/table.ts';
 import { isStale, presence, SWEEP_EVERY_MS, type OpenSeat } from './presence.ts';
-import { joinRoom, readRoom, seatOf, type Room } from './room.ts';
+import {
+  joinRoom,
+  readRoom,
+  removeBotFromRoom,
+  seatAfterRemoving,
+  seatOf,
+  type Room,
+} from './room.ts';
 
 /**
  * A socket's seat and when it was accepted, set by the host when it accepted the socket. A
@@ -164,6 +171,20 @@ export class Table extends DurableObject<object> {
       this.broadcast(saved);
       // Presence has one seat more, a bot's, which no device will ever hold.
       return this.settle(saved, null);
+    }
+    if (m.type === 'remove-bot') {
+      const removed = removeBotFromRoom(room, seat, m.seat);
+      if (!removed.ok) return send(ws, { type: 'refused', refusal: removed.refusal });
+      this.save(removed.value);
+      // A socket's seat is its attachment, read on every message it sends: each one after the
+      // bot's moves up with its token before anyone is told, or a friend's next message would
+      // be judged as the seat they no longer hold.
+      for (const open of this.open(null)) {
+        const moved = seatAfterRemoving(open.seat, m.seat);
+        if (moved !== open.seat) open.ws.serializeAttachment({ seat: moved, since: open.since });
+      }
+      this.broadcast(removed.value);
+      return this.settle(removed.value, null);
     }
     if (m.type === 'cancel') {
       const cancelled = cancel(room.table, seat);

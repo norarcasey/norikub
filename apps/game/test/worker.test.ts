@@ -505,6 +505,58 @@ describe('bots at a friends’ table', () => {
   }, 30_000);
 });
 
+describe('a bot taken off before the deal (KUB-54)', () => {
+  /**
+   * The ticket's done-when, through the host as deployed: the first seat takes off a bot that
+   * friends sat down after, and every friend's token, and every open socket, still holds that
+   * friend's own seat, now one up.
+   */
+  it('moves every later seat up, open sockets and tokens alike', async () => {
+    const code = freshCode();
+    const noraSat = await seatAt(code, 'Nora');
+    const nora = new Seat(code, noraSat.token);
+    await nora.until((s) => s.views().length > 0);
+    await nora.send({ type: 'add-bot', level: 'medium', name: 'Erik' });
+    await nora.until((s) => s.lastView().names.length === 2);
+    const kitSat = await seatAt(code, 'Kit');
+    const boSat = await seatAt(code, 'Bo');
+    expect([kitSat.seat, boSat.seat]).toEqual([2, 3]);
+    const kit = new Seat(code, kitSat.token);
+    await kit.until((s) => s.views().length > 0);
+
+    // Only the first seat takes a bot off, and only a bot.
+    await kit.send({ type: 'remove-bot', seat: 1 });
+    await kit.until((s) => s.messages().at(-1)?.type === 'refused');
+    await nora.send({ type: 'remove-bot', seat: 2 });
+    await nora.until((s) => s.messages().some((m) => m.type === 'refused'));
+    expect(nora.messages().find((m) => m.type === 'refused')).toEqual({
+      type: 'refused',
+      refusal: { kind: 'table', refusal: { kind: 'not-a-bot' } },
+    });
+
+    await nora.send({ type: 'remove-bot', seat: 1 });
+    await kit.until((s) => s.lastView().names.length === 3);
+    const after = { phase: 'seating', names: ['Nora', 'Kit', 'Bo'], bots: [] };
+    expect(kit.lastView()).toEqual({ ...after, you: 1 });
+    await nora.until((s) => s.lastView().names.length === 3);
+    expect(nora.lastView()).toEqual({ ...after, you: 0 });
+
+    // A token opens its friend's seat, now one up, whether or not it was connected.
+    const bo = new Seat(code, boSat.token);
+    const kitAgain = new Seat(code, kitSat.token);
+    await bo.until((s) => s.views().length > 0);
+    await kitAgain.until((s) => s.views().length > 0);
+    expect(bo.lastView()).toEqual({ ...after, you: 2 });
+    expect(kitAgain.lastView()).toEqual({ ...after, you: 1 });
+
+    // Kit's socket from before was moved too: what it sends is judged as seat 1, not 2.
+    await kit.send({ type: 'cancel' });
+    await nora.until((s) => s.lastView().phase === 'cancelled');
+    expect(nora.lastView()).toEqual({ ...after, phase: 'cancelled', you: 0, by: 1 });
+    for (const seat of [nora, kit, bo, kitAgain]) seat.close();
+  });
+});
+
 describe('a cancelled table', () => {
   it('is cancelled by any seat for everyone, stays so, and seats nobody after', async () => {
     const code = freshCode();

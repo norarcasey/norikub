@@ -11,6 +11,7 @@ import {
   cancel,
   deal,
   newTable,
+  removeBot,
   sitDown,
   tableViewFor,
 } from '../../../../packages/core/src/table.ts';
@@ -27,6 +28,7 @@ import {
   sendAwayVote,
   sendCancel,
   sendDeal,
+  sendRemoveBot,
   sendTiles,
   sendTurn,
   shownView,
@@ -98,6 +100,16 @@ class Host {
       if (!added.ok)
         return void this.inbox[seat]?.push({ type: 'refused', refusal: added.refusal });
       this.table = added.value;
+      return this.broadcast();
+    }
+    if (message.type === 'remove-bot') {
+      const removed = removeBot(this.table, seat, message.seat);
+      if (!removed.ok)
+        return void this.inbox[seat]?.push({ type: 'refused', refusal: removed.refusal });
+      this.table = removed.value;
+      // As the host moves each socket after the bot up a seat.
+      this.inbox.splice(message.seat, 1);
+      this.here.splice(message.seat, 1);
       return this.broadcast();
     }
     if (message.type === 'cancel') {
@@ -496,7 +508,38 @@ describe('bots at a friends’ table', () => {
     ]);
 
     bo = host.deliver(1, sent(host, 1, sendAddBot(host.deliver(1, bo), 'easy')));
-    expect(bo.notes.map(noteText)).toEqual(['The first player to sit down adds the bots.']);
+    expect(bo.notes.map(noteText)).toEqual([
+      'The first player to sit down adds and removes the bots.',
+    ]);
+  });
+
+  it('are taken off by the first seat, and the page learns its new seat from the host (KUB-54)', () => {
+    const host = new Host(newTable(), 3);
+    const first = sitDown(host.table, 'Ana');
+    if (!first.ok) throw new Error('could not sit');
+    host.table = first.value.table;
+    host.broadcast();
+    let ana = host.deliver(0, newFriends());
+    ana = host.deliver(0, sent(host, 0, sendAddBot(ana, 'medium')));
+    const second = sitDown(host.table, 'Bo');
+    if (!second.ok) throw new Error('could not sit');
+    host.table = second.value.table;
+    host.broadcast();
+    let bo = host.deliver(2, newFriends());
+    expect(bo.host?.you).toBe(2);
+
+    const removing = sendRemoveBot(host.deliver(0, ana), 1);
+    expect(removing.send).toEqual([{ type: 'remove-bot', seat: 1 }]);
+    ana = host.deliver(0, sent(host, 0, removing));
+    expect(ana.host?.names).toEqual(['Ana', 'Bo']);
+    expect(ana.host?.bots).toEqual([]);
+    bo = host.deliver(1, bo);
+    expect(bo.host?.you).toBe(1);
+
+    bo = host.deliver(1, sent(host, 1, sendRemoveBot(bo, 0)));
+    expect(bo.notes.map(noteText)).toEqual([
+      'The first player to sit down adds and removes the bots.',
+    ]);
   });
 
   it('are never shown away and have their faces', () => {

@@ -15,6 +15,7 @@ import {
   cancel,
   deal,
   newTable,
+  removeBot,
   sitDown,
   tableSchema,
   tableViewFor,
@@ -417,6 +418,46 @@ describe('bots in the empty seats', () => {
     if (!off.ok) throw new Error('not cancelled');
     expect(off.value.bots).toEqual(table.bots);
     expect(addBot(off.value, 0, 'easy', 'Edward')).toEqual(refusal('cancelled'));
+  });
+
+  it('are taken off by the first seat before the deal, and every later seat moves up (KUB-54)', () => {
+    // Erik tapped by mistake, then Ana sat down after him and Michael was added after her.
+    const sat = sitDown(withBot(seated('Nora'), 'medium', 'Erik'), 'Ana');
+    if (!sat.ok) throw new Error('not seated');
+    const table = withBot(sat.value.table, 'hard', 'Michael');
+    const removed = removeBot(table, 0, 1);
+    expect(removed).toEqual({
+      ok: true,
+      value: {
+        phase: 'seating',
+        names: ['Nora', 'Ana', 'Michael'],
+        bots: [{ seat: 2, level: 'hard' }],
+      },
+    });
+    // The last seat too, and a bot before none is left alone.
+    expect(removeBot(table, 0, 3)).toEqual({
+      ok: true,
+      value: {
+        phase: 'seating',
+        names: ['Nora', 'Erik', 'Ana'],
+        bots: [{ seat: 1, level: 'medium' }],
+      },
+    });
+
+    const refusal = (kind: string) => ({
+      ok: false,
+      refusal: { kind: 'table', refusal: { kind } },
+    });
+    expect(removeBot(table, 2, 1)).toEqual(refusal('only-the-first-seat-adds-bots'));
+    expect(removeBot(table, 0, 2)).toEqual(refusal('not-a-bot'));
+    expect(removeBot(table, 0, 0)).toEqual(refusal('not-a-bot'));
+    expect(removeBot(table, 0, 9)).toEqual(refusal('not-a-bot'));
+    const playing = deal(table, 0, 1);
+    if (!playing.ok) throw new Error('not dealt');
+    expect(removeBot(playing.value, 0, 1)).toEqual(refusal('already-dealt'));
+    const off = cancel(table, 0);
+    if (!off.ok) throw new Error('not cancelled');
+    expect(removeBot(off.value, 0, 1)).toEqual(refusal('cancelled'));
   });
 
   it('let one friend deal against bots alone, and come with the table to every deal', () => {

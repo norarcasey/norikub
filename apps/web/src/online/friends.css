@@ -211,3 +211,10 @@
   gap: 8px;
   margin-bottom: 12px;
 }
+
+/* Small and to the side: it undoes a tap, and should not read as the seat's main action. */
+.remove-bot {
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 0.85em;
+}
