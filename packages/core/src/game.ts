@@ -81,9 +81,12 @@ export function newGame({ names, seed }: NewGame): Game {
   };
 }
 
+export const drawRefusalSchema = z.enum(['game-over', 'no-such-tile']);
+export type DrawRefusal = z.infer<typeof drawRefusalSchema>;
+
 export type DrawResult =
   | { readonly ok: true; readonly game: Game; readonly drawn: Tile | null }
-  | { readonly ok: false; readonly refusal: 'game-over' | 'no-such-tile' };
+  | { readonly ok: false; readonly refusal: DrawRefusal };
 
 /**
  * The alternative to playing: take one tile from the pool and pass the turn. With the pool

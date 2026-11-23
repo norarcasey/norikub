@@ -7,10 +7,13 @@
     "./bot": "./src/bot.ts",
     "./game": "./src/game.ts",
     "./parse": "./src/parse.ts",
+    "./protocol": "./src/protocol.ts",
     "./random": "./src/random.ts",
     "./sets": "./src/sets.ts",
+    "./table": "./src/table.ts",
     "./tiles": "./src/tiles.ts",
-    "./turn": "./src/turn.ts"
+    "./turn": "./src/turn.ts",
+    "./view": "./src/view.ts"
   },
   "dependencies": {
     "zod": "^4.6.5"

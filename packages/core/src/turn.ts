@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import { FIRST_MELD_POINTS, draw, finish, nextSeat } from './game.ts';
 import type { DrawResult, Game } from './game.ts';
 import { judgeSet, splitFor } from './sets.ts';
@@ -23,11 +25,16 @@ export type Turn = {
  * is a run the tile does not extend but would fit by splitting it (`splitFor`), the run is split
  * there, its left half keeping the set's place and its right half coming next (KUB-23).
  */
-export type Move =
-  | { readonly kind: 'to-set'; readonly tileId: string; readonly set: number }
-  | { readonly kind: 'onto-set'; readonly tileId: string; readonly set: number }
-  | { readonly kind: 'to-new-set'; readonly tileId: string }
-  | { readonly kind: 'to-rack'; readonly tileId: string };
+const tileIdSchema = z.string().min(1).max(32);
+const setIndexSchema = z.number().int().min(0);
+
+export const moveSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('to-set'), tileId: tileIdSchema, set: setIndexSchema }).readonly(),
+  z.object({ kind: z.literal('onto-set'), tileId: tileIdSchema, set: setIndexSchema }).readonly(),
+  z.object({ kind: z.literal('to-new-set'), tileId: tileIdSchema }).readonly(),
+  z.object({ kind: z.literal('to-rack'), tileId: tileIdSchema }).readonly(),
+]);
+export type Move = z.infer<typeof moveSchema>;
 
 /**
  * The only moves refused at once, because no end of turn could make them legal: a tile that
@@ -36,11 +43,13 @@ export type Move =
  * player should be told that rather than the general rule. The rest are moves that name
  * something not there.
  */
-export type MoveRefusal =
-  | { readonly kind: 'no-such-tile'; readonly tileId: string }
-  | { readonly kind: 'no-such-set'; readonly set: number }
-  | { readonly kind: 'table-tile-to-rack'; readonly tileId: string }
-  | { readonly kind: 'table-joker-to-rack'; readonly tileId: string };
+export const moveRefusalSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('no-such-tile'), tileId: z.string() }).readonly(),
+  z.object({ kind: z.literal('no-such-set'), set: z.number().int() }).readonly(),
+  z.object({ kind: z.literal('table-tile-to-rack'), tileId: z.string() }).readonly(),
+  z.object({ kind: z.literal('table-joker-to-rack'), tileId: z.string() }).readonly(),
+]);
+export type MoveRefusal = z.infer<typeof moveRefusalSchema>;
 
 export type MoveResult =
   | { readonly ok: true; readonly turn: Turn }
@@ -102,12 +111,14 @@ function beganOnTable(turn: Turn, tileId: string): boolean {
  * Why a turn cannot end as it stands. The player keeps rearranging, takes the turn back, or
  * draws instead.
  */
-export type TurnFault =
-  | { readonly kind: 'game-over' }
-  | { readonly kind: 'nothing-played' }
-  | { readonly kind: 'invalid-set'; readonly set: number }
-  | { readonly kind: 'table-touched-before-first-meld' }
-  | { readonly kind: 'first-meld-under-30'; readonly points: number };
+export const turnFaultSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('game-over') }).readonly(),
+  z.object({ kind: z.literal('nothing-played') }).readonly(),
+  z.object({ kind: z.literal('invalid-set'), set: z.number().int() }).readonly(),
+  z.object({ kind: z.literal('table-touched-before-first-meld') }).readonly(),
+  z.object({ kind: z.literal('first-meld-under-30'), points: z.number().int() }).readonly(),
+]);
+export type TurnFault = z.infer<typeof turnFaultSchema>;
 
 export type EndTurnResult =
   | { readonly ok: true; readonly game: Game }

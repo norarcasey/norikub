@@ -160,7 +160,10 @@ every few moves instead of every one, at the price of a reload losing the last f
 Filed from `KUB-12`, in order:
 
 1. `KUB-32` The turn shared between seats, in core: each seat's view of a turn in progress
-   and the protocol, with no host yet.
+   and the protocol, with no host yet. Built: `packages/core/src/view.ts` (`turnView`),
+   `table.ts` (seating, the deal, `apply`, `tableViewFor`) and `protocol.ts`. Sitting down is
+   the page's `POST /tables/<code>/join`, as in Hanora, since its answer carries the seat's
+   token; the socket carries `deal` and the four turn messages.
 2. `KUB-33` The game host in `apps/game`, deployed by CI. Needs Nora: the Cloudflare secrets
    in this repository's `production` environment and a **Shipit**.
 3. `KUB-34` The page's table at `/t/<code>`: start a table, send the link, sit down by name,
