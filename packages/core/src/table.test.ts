@@ -536,5 +536,6 @@ describe('bots in the empty seats', () => {
     // About half of the 366 bot turns these 20 seeds gave on 23 Nov 2026, so a change that stopped
     // the bots playing fails here instead of passing.
     expect(botTurns).toBeGreaterThan(180);
-  });
+    // 5.4 s on CI's runner on 23 Nov 2026, over the 5 s default: the hard bot searches the table.
+  }, 20_000);
 });
