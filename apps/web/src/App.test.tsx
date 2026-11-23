@@ -13,6 +13,22 @@ it('renders without throwing', () => {
   expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Norikub');
 });
 
+/** Opens the side menu and picks an item from it (KUB-50). */
+function fromMenu(name: string) {
+  fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+  const menu = screen.getByRole('dialog', { name: 'Menu' });
+  fireEvent.click(
+    within(menu).getByRole(name === 'Back to your game' ? 'link' : 'button', { name }),
+  );
+}
+
+/** The menu's items, by name, leaving it open. */
+function menuItems() {
+  fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+  const menu = screen.getByRole('dialog', { name: 'Menu' });
+  return [...menu.querySelectorAll('a, button')].map((item) => item.textContent);
+}
+
 it('hands every change to be saved before it is shown (invariant 3)', () => {
   const shown: string[] = [];
   const onSave = vi.fn((session: Session) => {
@@ -34,7 +50,7 @@ describe('picking the bots (KUB-41, KUB-49)', () => {
   it('deals a new game mid-game against the faces picked, and saves it first', () => {
     const onSave = vi.fn();
     render(<App initial={newSession(7)} onSave={onSave} />);
-    fireEvent.click(screen.getByRole('button', { name: 'New game' }));
+    fromMenu('New game');
     const dialog = screen.getByRole('dialog', { name: 'New game' });
     // The last game's Erik and Cowthey Fuzzy come in picked; swap Erik for Michael.
     pick(dialog, 'Erik, medium');
@@ -56,7 +72,7 @@ describe('picking the bots (KUB-41, KUB-49)', () => {
   it('shows all nine faces, seats up to three in the order picked, and deals none', () => {
     const onSave = vi.fn();
     render(<App initial={newSession(7)} onSave={onSave} />);
-    fireEvent.click(screen.getByRole('button', { name: 'New game' }));
+    fromMenu('New game');
     const dialog = screen.getByRole('dialog', { name: 'New game' });
     expect(within(dialog).getAllByRole('checkbox')).toHaveLength(9);
     pick(dialog, 'Erik, medium');
@@ -87,7 +103,7 @@ describe('picking the bots (KUB-41, KUB-49)', () => {
   it('leaves the game as it was when the picker is closed', () => {
     const onSave = vi.fn();
     render(<App initial={newSession(7)} onSave={onSave} />);
-    fireEvent.click(screen.getByRole('button', { name: 'New game' }));
+    fromMenu('New game');
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(onSave).not.toHaveBeenCalled();
@@ -196,19 +212,19 @@ describe('the account', () => {
   it('is not offered by a build without the Supabase values, and the game is as before', () => {
     // The test build has none, as a deploy missing its secrets would not: the game must load.
     render(<App initial={newSession(7)} />);
-    expect(screen.queryByRole('button', { name: 'Account' })).toBeNull();
+    expect(menuItems()).not.toContain('Account');
     expect(screen.getByRole('button', { name: 'End turn' })).toBeTruthy();
   });
 
   it('is not offered when sign-in is switched off', () => {
     render(<App initial={newSession(7)} account={null} />);
-    expect(screen.queryByRole('button', { name: 'Account' })).toBeNull();
+    expect(menuItems()).not.toContain('Account');
   });
 
   it('opens over the game, which stays where it was, and closes', async () => {
     render(<App initial={newSession(7)} account={signedOut} />);
     const rack = screen.getByRole('region', { name: 'Your rack' });
-    fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+    fromMenu('Account');
     await settle();
     expect(screen.getByRole('dialog', { name: 'Account' })).toBeTruthy();
     expect(screen.getByLabelText('Email')).toBeTruthy();
@@ -220,12 +236,12 @@ describe('the account', () => {
 
   it('closes on Escape and on a tap beside the panel, not on one inside it', async () => {
     render(<App initial={newSession(7)} account={signedOut} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+    fromMenu('Account');
     await settle();
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Account' }));
+    fromMenu('Account');
     await settle();
     fireEvent.click(screen.getByLabelText('Email'));
     expect(screen.getByRole('dialog')).toBeTruthy();
@@ -235,9 +251,13 @@ describe('the account', () => {
 });
 
 describe('playing friends', () => {
-  it('offers a new table at its own link when the build knows a game host', () => {
+  it('offers a new table at its own link in the New game panel, with the bots (KUB-50)', () => {
     render(<App seed={7} account={null} friends={new URL('http://localhost:8787')} />);
-    const link = screen.getByRole('link', { name: 'Play friends' });
+    expect(screen.queryByRole('link', { name: 'Play friends' })).toBeNull();
+    fromMenu('New game');
+    const panel = screen.getByRole('dialog', { name: 'New game' });
+    expect(within(panel).getByRole('button', { name: 'Deal a new game' })).toBeTruthy();
+    const link = within(panel).getByRole('link', { name: 'Play friends' });
     expect(link.getAttribute('href')).toMatch(/^\/t\/[a-z0-9]{12}$/);
   });
 
@@ -254,6 +274,7 @@ describe('playing friends', () => {
     expect(back.getAttribute('href')).toBe('/t/abcd2345efgh');
     landing.unmount();
     render(<App seed={7} account={null} friends={host} />);
+    expect(menuItems()).toContain('Back to your game');
     expect(screen.getByRole('link', { name: 'Back to your game' }).getAttribute('href')).toBe(
       '/t/abcd2345efgh',
     );
@@ -262,6 +283,62 @@ describe('playing friends', () => {
 
   it('offers nothing in a build with no game host', () => {
     render(<App seed={7} account={null} friends={null} />);
+    fromMenu('New game');
     expect(screen.queryByRole('link', { name: 'Play friends' })).toBeNull();
+  });
+});
+
+describe('the menu (KUB-50)', () => {
+  const signedOut: Account = {
+    current: () => Promise.resolve(null),
+    watch: () => () => {},
+    sendCode: () => Promise.resolve({ ok: true }),
+    verifyCode: () => Promise.resolve({ ok: true }),
+    signOut: () => Promise.resolve({ ok: true }),
+  };
+
+  it('holds what was in the bar, and the bar holds only the game', () => {
+    render(<App initial={newSession(7)} account={signedOut} friends={null} />);
+    const bar = screen.getByRole('banner');
+    expect(
+      within(bar)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Menu']);
+    expect(bar.textContent).not.toContain('Pool');
+    expect(menuItems()).toEqual(['×', 'New game', 'Account']);
+  });
+
+  it('closes on Escape, on its close button and on a tap beside it, leaving the game as it was', () => {
+    const onSave = vi.fn();
+    render(<App initial={newSession(7)} onSave={onSave} account={null} friends={null} />);
+    const rack = screen.getByRole('region', { name: 'Your rack' });
+    const open = () => fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    open();
+    expect(screen.getByRole('button', { name: 'Menu' }).getAttribute('aria-expanded')).toBe('true');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    open();
+    fireEvent.click(screen.getByRole('button', { name: 'Close menu' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    open();
+    fireEvent.click(screen.getByRole('dialog', { name: 'Menu' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('region', { name: 'Your rack' })).toBe(rack);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('gives way to the panel picked from it', () => {
+    render(<App initial={newSession(7)} account={null} friends={null} />);
+    fromMenu('New game');
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'New game' })).toBeTruthy();
+  });
+
+  it('shows the pool count by the face-down pile', () => {
+    render(<App initial={newSession(7)} account={null} friends={null} />);
+    const pool = screen.getByRole('region', { name: /Face-down tiles/ });
+    const left = within(pool).getAllByRole('button', { name: 'Face-down tile' }).length;
+    expect(pool.textContent).toBe(`Pool: ${left}`);
   });
 });

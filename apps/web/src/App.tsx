@@ -10,6 +10,7 @@ import './online/friends.css';
 import { standing } from '@norikub/core/match';
 
 import { Landing } from './Landing.tsx';
+import { MenuButton, MenuDrawer } from './Menu.tsx';
 import { UpdateNotice } from './pwa/UpdateNotice.tsx';
 import { GameScreen } from './table/GameScreen.tsx';
 import { GameSetup } from './table/GameSetup.tsx';
@@ -57,6 +58,12 @@ export function App({
   );
   const [accountOpen, setAccountOpen] = useState(false);
   const [dealOpen, setDealOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // The drawer gives way to what was picked from it, rather than staying open under it.
+  const openFromMenu = (open: (value: boolean) => void) => {
+    setMenuOpen(false);
+    open(true);
+  };
   const [tableCode] = useState(() => newTableCode());
   const [backTo] = useState(lastTable);
   const change = (next: Session) => {
@@ -100,40 +107,53 @@ export function App({
         barEnd={
           <>
             {line !== null && <span className="match-line">{line}</span>}
-            {game.status.kind === 'playing' && (
-              <button type="button" className="account-open" onClick={() => setDealOpen(true)}>
-                New game
-              </button>
-            )}
-            {backLink !== null && (
-              <a className="play-friends" href={backLink}>
-                Back to your game
-              </a>
-            )}
-            {friendsLink !== null && (
-              // A new table is a new link; going there leaves this game saved as it is.
-              <a className="play-friends" href={friendsLink}>
-                Play friends
-              </a>
-            )}
-            {offered && (
-              <button type="button" className="account-open" onClick={() => setAccountOpen(true)}>
-                Account
-              </button>
-            )}
+            <MenuButton open={menuOpen} onOpen={() => setMenuOpen(true)} />
           </>
         }
       />
+      {menuOpen && (
+        <MenuDrawer onClose={() => setMenuOpen(false)}>
+          <button type="button" className="menu-item" onClick={() => openFromMenu(setDealOpen)}>
+            New game
+          </button>
+          {backLink !== null && (
+            <a className="menu-item" href={backLink}>
+              Back to your game
+            </a>
+          )}
+          {offered && (
+            <button
+              type="button"
+              className="menu-item"
+              onClick={() => openFromMenu(setAccountOpen)}
+            >
+              Account
+            </button>
+          )}
+        </MenuDrawer>
+      )}
       {dealOpen && (
         <Dialog label="New game" onClose={() => setDealOpen(false)}>
           <section className="account">
             <h2>New game</h2>
-            <p>
-              {match.format.kind === 'single'
-                ? 'This game is given up, and a new one dealt as set up here.'
-                : 'This match is given up, and a new one dealt as set up here.'}
-            </p>
+            {game.status.kind === 'playing' && (
+              <p>
+                {match.format.kind === 'single'
+                  ? 'This game is given up, and a new one dealt as set up here.'
+                  : 'This match is given up, and a new one dealt as set up here.'}
+              </p>
+            )}
             <GameSetup initial={setupOf(session)} action="Deal a new game" onDeal={deal} />
+            {friendsLink !== null && (
+              // One place to start a game, with bots or with friends (Nora, KUB-50). A new table
+              // is a new link; going there leaves this game saved as it is.
+              <div className="new-game-friends">
+                <p>Or start a table and send its link to friends.</p>
+                <a className="play-friends" href={friendsLink}>
+                  Play friends
+                </a>
+              </div>
+            )}
           </section>
         </Dialog>
       )}

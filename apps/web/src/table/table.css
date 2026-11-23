@@ -350,6 +350,22 @@ body {
   height: clamp(130px, 20dvh, 180px);
 }
 
+/*
+ * In the pile's top-left corner, over any tile that lies there so it is never hidden, and
+ * letting a tap through to that tile (KUB-50).
+ */
+.pool-count {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgb(35 74 71 / 0.85);
+  font-size: 13px;
+  pointer-events: none;
+}
+
 /* The back of a tile, the same on every one. */
 .face-down {
   position: absolute;

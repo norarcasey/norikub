@@ -105,21 +105,3 @@
 .account-error {
   color: var(--bad);
 }
-
-/* In the game bar, beside the pool count: quiet, because the game is the point. */
-.account-open {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid rgb(243 239 228 / 0.55);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.account-open:focus-visible {
-  outline: 2px solid #ffd54a;
-  outline-offset: 2px;
-}

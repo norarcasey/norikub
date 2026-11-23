@@ -228,7 +228,7 @@ export function GameScreen({
   onNewGame: (setup: Setup) => void;
   /** The next game of the match, once this one is over and the match is not (KUB-42). */
   onNextGame: () => void;
-  /** Shown at the end of the game bar, after the pool count: the Account button (KUB-29). */
+  /** Shown at the end of the game bar: the match line and the menu (KUB-29, KUB-50). */
   barEnd?: ReactNode;
 }) {
   const board = boardOf(session);
@@ -485,10 +485,7 @@ export function TableScreen({
             </li>
           ))}
         </ul>
-        <div className="game-bar-end">
-          <span>Pool: {poolCount}</span>
-          {barEnd}
-        </div>
+        <div className="game-bar-end">{barEnd}</div>
       </header>
 
       <section className="table" aria-label="Table" data-autoscroll>
@@ -539,6 +536,8 @@ export function TableScreen({
         // pick then. Each lies at its own spot in a scattered pile, keyed by the spot, so a
         // draw takes one tile away and leaves the rest where they lie (KUB-25).
         <section className="pool" aria-label="Face-down tiles: pick one to draw">
+          {/* By the pile it counts, not up in the bar (Nora, KUB-50). */}
+          <span className="pool-count">Pool: {poolCount}</span>
           {pile.map((spot, pick) => {
             const { x, y, turn: angle } = pileSpot(spot);
             return (

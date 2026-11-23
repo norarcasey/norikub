@@ -1,0 +1,121 @@
+/*
+ * The side menu (KUB-50), in the table's own tokens (table/table.css): it slides over the
+ * table rather than pushing it, so the game under it stays exactly where it was.
+ */
+.menu-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid rgb(243 239 228 / 0.55);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.menu-open:focus-visible,
+.menu-drawer a:focus-visible,
+.menu-drawer button:focus-visible {
+  outline: 2px solid #ffd54a;
+  outline-offset: 2px;
+}
+
+.menu-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(0 0 0 / 0.45);
+  animation: menu-fade 160ms ease-out;
+}
+
+.menu-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  width: min(280px, 82vw);
+  height: 100%;
+  padding: calc(env(safe-area-inset-top) + 12px) calc(env(safe-area-inset-right) + 16px)
+    calc(env(safe-area-inset-bottom) + 16px) 16px;
+  border-left: 1px solid var(--felt-edge);
+  background: var(--felt);
+  color: var(--text);
+  box-shadow: -12px 0 32px rgb(0 0 0 / 0.35);
+  overflow-y: auto;
+  animation: menu-slide 200ms ease-out;
+}
+
+.menu-close {
+  align-self: flex-end;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgb(243 239 228 / 0.3);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: rgb(243 239 228 / 0.08);
+}
+
+@keyframes menu-slide {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes menu-fade {
+  from {
+    background: rgb(0 0 0 / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-veil,
+  .menu-drawer {
+    animation: none;
+  }
+}
+
+/* In the New game panel: friends are the other way to start one (KUB-50). */
+.new-game-friends {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgb(243 239 228 / 0.3);
+}
+
+.new-game-friends .play-friends {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 0 16px;
+}
