@@ -1,5 +1,5 @@
 import { parse } from '../../../packages/core/src/parse.ts';
-import { tableCodeSchema } from '../../../packages/core/src/protocol.ts';
+import { SITE_REFUSED, tableCodeSchema } from '../../../packages/core/src/protocol.ts';
 import type { Table } from './host.ts';
 import { corsHeaders, originAllowed } from './origin.ts';
 
@@ -22,11 +22,19 @@ const route = /^\/tables\/([^/]+)\/(join|socket)$/;
 export default {
   fetch(request: Request, env: Env): Response | Promise<Response> {
     const origin = request.headers.get('Origin');
-    if (origin === null || !originAllowed(origin, env.SITE_ORIGINS)) {
-      return new Response('origin not allowed', { status: 403 });
-    }
+    const refused = { refused: SITE_REFUSED };
+    if (origin === null) return Response.json(refused, { status: 403 });
     const cors = corsHeaders(origin);
+    // Every origin's preflight passes, and an unlisted origin's request is refused with CORS
+    // headers naming it, so that page can read `{ refused: 'site' }` and say so: a failed
+    // preflight reaches a page only as a network error, and KUB-46's missing origin looked
+    // exactly like a dropped connection. Echoing the origin here drives nothing, which is what
+    // origin.ts guards: the refusal is answered before any table is touched, and a socket is
+    // refused the same way, where CORS never applies (22 Nov 2026, KUB-47).
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
+    if (!originAllowed(origin, env.SITE_ORIGINS)) {
+      return Response.json(refused, { status: 403, headers: cors });
+    }
 
     const match = route.exec(new URL(request.url).pathname);
     const code = parse(tableCodeSchema, match?.[1]);

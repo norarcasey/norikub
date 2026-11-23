@@ -7,11 +7,13 @@ import {
   joinResponseSchema,
   PING,
   PONG,
+  SITE_REFUSED,
   tableMessageSchema,
   type TableClientMessage,
   type TableMessage,
 } from '../../../packages/core/src/protocol.ts';
 import type { TableView } from '../../../packages/core/src/table.ts';
+import { probeOrigin } from '../src/probe.ts';
 
 /**
  * The game host as deployed: the Worker and its Durable Object running in workerd, started by
@@ -146,6 +148,46 @@ describe('the Worker', () => {
       headers: { Origin: SITE },
     });
     expect(get.status).toBe(405);
+  });
+
+  // KUB-47: the refusal is one the refused page can read, and it still seats nobody.
+  it("tells another site's page it is refused, in words it can read, and seats nobody", async () => {
+    const code = freshCode();
+    const evil = 'https://evil.example';
+    const preflight = await fetch(new URL(`/tables/${code}/join`, base), {
+      method: 'OPTIONS',
+      headers: { Origin: evil },
+    });
+    expect(preflight.status).toBe(204);
+    const res = await sitDown(code, 'Nora', evil);
+    expect(res.status).toBe(403);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(evil);
+    expect(await res.json()).toEqual({ refused: SITE_REFUSED });
+
+    const socket = new URL(`/tables/${code}/socket?token=${'x'.repeat(36)}`, base);
+    socket.protocol = 'ws:';
+    const ws = new WebSocket(socket, { headers: { Origin: evil } });
+    const opened = await new Promise<boolean>((resolve) => {
+      ws.addEventListener('open', () => resolve(true));
+      ws.addEventListener('error', () => resolve(false));
+    });
+    expect(opened).toBe(false);
+
+    // The table was never touched: the first page allowed to sit down takes the first seat.
+    expect((await seatAt(code, 'Nora')).seat).toBe(0);
+    const bare = await fetch(new URL(`/tables/${code}/join`, base), { method: 'POST' });
+    expect(bare.status).toBe(403);
+    expect(bare.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+
+  // CI's check-origins, against the Worker as deployed: what it says of a listed origin, and of
+  // one SITE_ORIGINS left out, as KUB-46's crucinora.com was.
+  it('passes a listed origin in the deploy check, and fails an unlisted one by name', async () => {
+    expect(await probeOrigin(base, 'https://norikub.crucinora.com', freshCode())).toBeNull();
+    const problem = await probeOrigin(base, 'https://kub.elsewhere.example', freshCode());
+    expect(problem).toMatch(
+      /^https:\/\/kub\.elsewhere\.example is not in the game host's SITE_ORIGINS/,
+    );
   });
 
   it('answers a preflight for the site, naming it', async () => {

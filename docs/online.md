@@ -38,7 +38,11 @@ What Norikub needs that Hanora did not is in **What is Norikub's own**, below.
   the bots. The seat rides on the socket as its server-side attachment, from the token it
   connected with; a seat named in a message is ignored.
 - **The Worker checks every socket's `Origin`** against the site's (`SITE_ORIGINS`, plus any
-  `http://localhost` port), since `*.workers.dev` is a second origin.
+  `http://localhost` port), since `*.workers.dev` is a second origin. Another origin's
+  request is refused with `{ refused: 'site' }` and CORS headers naming it, so the refused page
+  can say _this site is not allowed_ rather than _could not be reached_; it touches no table.
+  CI's `check-origins` holds every production domain of the Vercel project to the deployed
+  host after each deploy (`KUB-47`).
 - **CI deploys it** in a `deploy-game` job behind `gate`, as Hanora's does, and never a
   `wrangler deploy` from the laptop: invariant 5 then covers both hosts.
 - **`pnpm dev`** runs Vite and `wrangler dev` together, with no account.

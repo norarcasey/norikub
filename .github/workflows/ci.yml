@@ -112,3 +112,27 @@ jobs:
       - uses: ./.github/actions/setup
       # The wrangler pinned in package.json, so a deploy uses the same build as the tests.
       - run: pnpm exec wrangler deploy --config apps/game/wrangler.jsonc
+
+  # Every address the site is served from, held to the game host just deployed (KUB-47). The
+  # site moved to norikub.crucinora.com while SITE_ORIGINS still named only norikub.vercel.app,
+  # and every Sit down there failed as a dropped connection would (KUB-46). This lists the
+  # Vercel project's production domains and fails, naming the origin, on any the host refuses.
+  # A domain added in Vercel's dashboard is checked from the next deploy on; the gate's
+  # siteOrigins.test.ts holds the Mac app's home to the committed list before any deploy.
+  #
+  # Both deploys must have run: `needs` skips this when either is off, since against a host or
+  # site that did not ship there is nothing new to check.
+  check-origins:
+    needs: [deploy, deploy-game]
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      GAME_SERVER_URL: ${{ vars.GAME_SERVER_URL }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - run: node scripts/check-origins.ts

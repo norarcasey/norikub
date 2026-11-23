@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 
 import { parse } from '@norikub/core/parse';
-import { joinResponseSchema } from '@norikub/core/protocol';
+import { joinResponseSchema, SITE_REFUSED } from '@norikub/core/protocol';
+import type { JoinResponse } from '@norikub/core/protocol';
 import { displayNameSchema, tableRefusalSchema } from '@norikub/core/table';
 import { z } from 'zod';
 
@@ -189,6 +190,65 @@ function Panel({ children }: { children: ReactNode }) {
 /** The host's answer to a refused join: `{ refused }`, a table refusal or the host's own words. */
 const joinRefusedSchema = z.object({ refused: z.union([tableRefusalSchema, z.string()]) });
 
+type SatDown = { kind: 'seated'; seat: JoinResponse } | { kind: 'not seated'; text: string };
+
+/**
+ * One join, and what to tell the player when it did not seat them. Only a `fetch` that threw
+ * is *could not be reached*: until KUB-47 an answer that was not JSON (a 404's `not found`)
+ * and a refused origin's bare 403 said that too, and KUB-46's missing site origin passed for
+ * a dropped connection.
+ */
+async function sitDown(url: URL, name: string): Promise<SatDown> {
+  let response: Response;
+  let text: string;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    text = await response.text();
+  } catch {
+    return {
+      kind: 'not seated',
+      text: 'The table could not be reached. Check the connection and try again.',
+    };
+  }
+  const body = jsonOrNull(text);
+  const joined = parse(joinResponseSchema, body);
+  if (response.ok && joined.ok) return { kind: 'seated', seat: joined.value };
+  const refused = parse(joinRefusedSchema, body);
+  if (!refused.ok) {
+    return {
+      kind: 'not seated',
+      text: `The game host answered in a way this page does not understand (${response.status}).`,
+    };
+  }
+  const reason = refused.value.refused;
+  if (reason === SITE_REFUSED) {
+    return {
+      kind: 'not seated',
+      text: 'This site is not allowed to open tables. Open the table link from the Norikub site.',
+    };
+  }
+  return {
+    kind: 'not seated',
+    text:
+      typeof reason !== 'string'
+        ? tableRefusalText(reason)
+        : 'The table would not seat you. Try again.',
+  };
+}
+
+function jsonOrNull(text: string): unknown {
+  try {
+    const value: unknown = JSON.parse(text);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 function SitDown({
   code,
   server,
@@ -215,30 +275,10 @@ function SitDown({
     }
     setBusy(true);
     setSaid(null);
-    try {
-      const response = await fetch(tableJoinUrl(server, code), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: parsed.value }),
-      });
-      const body: unknown = await response.json();
-      const joined = parse(joinResponseSchema, body);
-      if (response.ok && joined.ok) {
-        onSeated({ ...joined.value, rows: null, startRows: null });
-        return;
-      }
-      const refused = parse(joinRefusedSchema, body);
-      const reason = refused.ok ? refused.value.refused : null;
-      setSaid(
-        reason !== null && typeof reason !== 'string'
-          ? tableRefusalText(reason)
-          : 'The table would not seat you. Try again.',
-      );
-    } catch {
-      setSaid('The table could not be reached. Check the connection and try again.');
-    } finally {
-      setBusy(false);
-    }
+    const said = await sitDown(tableJoinUrl(server, code), parsed.value);
+    setBusy(false);
+    if (said.kind === 'seated') onSeated({ ...said.seat, rows: null, startRows: null });
+    else setSaid(said.text);
   };
 
   return (

@@ -22,8 +22,10 @@
     // (src/origin.ts). norikub.crucinora.com is the site's own domain and the Mac app's home;
     // norikub.vercel.app is the production alias CI's deploy printed on 22 Nov 2026, and stays,
     // since a seat token lives in the origin's own storage. Every origin the site is served
-    // from has to be here: one missing turns every Sit down there into "could not be reached"
-    // (KUB-46, 22 Nov 2026).
+    // from has to be here: one missing refused every Sit down there (KUB-46, 22 Nov 2026).
+    // CI's `check-origins` now fails a deploy on a Vercel domain left out, and the gate's
+    // test/siteOrigins.test.ts on the Mac app's home (KUB-47). Supabase's redirect list is
+    // the one copy nothing checks.
     "SITE_ORIGINS": "https://norikub.crucinora.com, https://norikub.vercel.app",
   },
 }

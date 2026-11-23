@@ -28,6 +28,13 @@ export const joinResponseSchema = z
 export type JoinResponse = z.infer<typeof joinResponseSchema>;
 
 /**
+ * The Worker's `{ refused }` when the page's origin is not one of the site's (`KUB-47`). The
+ * page reads it to say *this site is not allowed* rather than *could not be reached*, which is
+ * what a bare 403 looked like to it until 22 Nov 2026 (`KUB-46`).
+ */
+export const SITE_REFUSED = 'site';
+
+/**
  * What a seat sends over its socket: `deal`, the first seat's once two or more are seated,
  * and the four messages of a turn being played (`apply` in `table.ts`), from the seat whose
  * turn it is.
