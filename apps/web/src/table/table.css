@@ -478,6 +478,42 @@ body {
 }
 
 /* An opponent with no device connected (KUB-35): still at the table, only away. */
+.opponents li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.avatar {
+  display: block;
+  flex-shrink: 0;
+}
+
+/*
+ * On a phone three names and three faces do not fit beside the pool and the buttons (measured
+ * at 390px wide, 22 Nov 2026: "Asa & Bo" wrapped to four lines and pushed "New game" off the
+ * edge). A bot's face says who it is there, so its name and the word "tiles" are left to a
+ * screen reader; a friend, who has no face, keeps theirs.
+ */
+@media (max-width: 600px) {
+  .opponents {
+    gap: 10px;
+  }
+
+  .opponents li[data-face] .opponent-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .opponents li {
+    white-space: nowrap;
+  }
+}
+
 .opponents li[data-away] {
   opacity: 0.6;
 }
@@ -587,6 +623,51 @@ body {
   border: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+/*
+ * Who each bot plays as (KUB-43): the cast's faces in a row over that bot's level, the picked
+ * face ringed in the tile colour and the rest dimmed, so the pick reads at a glance.
+ */
+.lineup-seat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding-top: 8px;
+  border-top: 1px solid rgb(243 239 228 / 0.2);
+}
+
+.lineup .cast legend {
+  float: none;
+  width: 100%;
+  margin: 0 0 4px;
+}
+
+.lineup .cast {
+  gap: 2px;
+}
+
+.lineup .cast label {
+  min-height: 0;
+  padding: 2px;
+  border-color: transparent;
+}
+
+/* Seven to a row down to a 360px phone. */
+.lineup .cast label img {
+  width: clamp(32px, 9vw, 44px);
+  height: auto;
+  opacity: 0.55;
+}
+
+.lineup .cast label:has(input:checked) {
+  border-color: var(--tile);
+  background: transparent;
+}
+
+.lineup .cast label:has(input:checked) img {
+  opacity: 1;
 }
 
 .lineup .lineup-hint {

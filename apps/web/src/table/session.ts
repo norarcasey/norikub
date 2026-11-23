@@ -11,6 +11,8 @@ import type { Move, MoveRefusal, Turn, TurnFault } from '@norikub/core/turn';
 
 import { toMove } from './drag.ts';
 import type { DropTarget } from './drag.ts';
+import { CAST_NAMES, firstFree } from './cast.ts';
+import type { Who } from './cast.ts';
 import { fitPile, takeFromPile } from './pile.ts';
 import type { Pile } from './pile.ts';
 import { dealRows, placeOnRack, reconcileRows } from './rack.ts';
@@ -22,14 +24,29 @@ import type { Frame } from './replay.ts';
 export const PERSON = 0;
 
 /**
- * Who plays the seats after the person's, in seat order: a level for each bot, picked before
- * the game (KUB-41). The engine never sees it: a level only chooses which bot is handed that
- * seat's view, and the bot's turn goes through the engine like anyone's (invariant 1).
+ * One bot's seat: how it plays, and who it plays as (KUB-43). The two are picked apart, and
+ * only the level reaches a bot.
  */
-export type Lineup = readonly Level[];
+export type BotSeat = { readonly level: Level; readonly who: Who };
+
+/**
+ * Who plays the seats after the person's, in seat order, picked before the game (KUB-41). The
+ * engine never sees it: a level only chooses which bot is handed that seat's view, and the bot's
+ * turn goes through the engine like anyone's (invariant 1). No two seats share a character, so
+ * two bots of one level are told apart by face and name.
+ */
+export type Lineup = readonly BotSeat[];
+
+/** Seats at these levels, each given the first character not already sitting. */
+export function seatsFor(levels: readonly Level[]): Lineup {
+  return levels.reduce<BotSeat[]>(
+    (seats, level) => [...seats, { level, who: firstFree(seats.map((seat) => seat.who)) }],
+    [],
+  );
+}
 
 /** The bots a game starts with when none were picked: the one bot there was before KUB-41. */
-export const FIRST_LINEUP: Lineup = ['medium', 'medium'];
+export const FIRST_LINEUP: Lineup = seatsFor(['medium', 'medium']);
 
 /**
  * What is picked before a sitting (KUB-42): the bots, one to three of them, and how long it
@@ -44,19 +61,9 @@ type Sitting = Pick<Session, 'lineup' | 'match'>;
 
 const FIRST_SITTING: Sitting = { lineup: FIRST_LINEUP, match: newMatch(SINGLE) };
 
-const LEVEL_NAMES: Readonly<Record<Level, string>> = {
-  easy: 'Easy bot',
-  medium: 'Medium bot',
-  hard: 'Hard bot',
-};
-
-/** The bots' names at the table: by level, lettered when two share one. */
+/** The bots' names at the table: their characters', which no two seats share. */
 export function botNames(lineup: Lineup): string[] {
-  return lineup.map((level, i) => {
-    const same = lineup.filter((other) => other === level).length;
-    const nth = lineup.slice(0, i).filter((other) => other === level).length;
-    return same > 1 ? `${LEVEL_NAMES[level]} ${'ABC'.charAt(nth)}` : LEVEL_NAMES[level];
-  });
+  return lineup.map((seat) => CAST_NAMES[seat.who]);
 }
 
 /**
@@ -198,7 +205,7 @@ function playBots(
 
 /** The level of the bot in `seat`: the lineup skips the person's seat. */
 function levelAt(lineup: Lineup, seat: number): Level {
-  return lineup[seat > PERSON ? seat - 1 : seat] ?? 'medium';
+  return lineup[seat > PERSON ? seat - 1 : seat]?.level ?? 'medium';
 }
 
 /** What the engine would say to a move, without making it: used while a tile is dragged. */

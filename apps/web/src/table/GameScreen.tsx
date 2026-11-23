@@ -7,6 +7,7 @@ import type { Status } from '@norikub/core/game';
 import type { Tile } from '@norikub/core/tiles';
 
 import { ANIMALS, NoraJoker } from './art.tsx';
+import { Avatar } from './Avatar.tsx';
 import { boardOf, sessionActions } from './board.ts';
 import type { Actions, Board } from './board.ts';
 import { dropAttribute, ghostTransform, toMove, useDrag } from './drag.ts';
@@ -451,6 +452,7 @@ export function TableScreen({
           {
             seat,
             name,
+            face: board.faces[seat] ?? null,
             count: watching?.counts[seat] ?? board.counts[seat] ?? 0,
             away: board.away[seat] === true,
             playing:
@@ -471,8 +473,14 @@ export function TableScreen({
               data-seat={o.seat}
               data-playing={o.playing || undefined}
               data-away={o.away || undefined}
+              data-face={o.face ?? undefined}
             >
-              {o.name}: {o.count} tiles
+              {o.face === null ? null : <Avatar who={o.face} size={32} />}
+              <span>
+                <span className="opponent-name">{o.name}: </span>
+                {o.count}
+                <span className="opponent-name"> tiles</span>
+              </span>
               {o.away ? <span className="away"> · away</span> : null}
             </li>
           ))}

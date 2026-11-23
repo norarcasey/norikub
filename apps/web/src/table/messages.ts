@@ -152,9 +152,12 @@ export function formatText(format: MatchFormat): string {
   }
 }
 
-/** What Play now will deal: "Against Medium bot A and Medium bot B, one game." */
+/** What Play now will deal: "Against Tatum (medium) and Edward (hard), one game." */
 export function setupText(setup: Setup): string {
-  return `Against ${listed(botNames(setup.lineup))}, ${formatText(setup.format)}.`;
+  const names = botNames(setup.lineup).map(
+    (name, i) => `${name} (${setup.lineup[i]?.level ?? 'medium'})`,
+  );
+  return `Against ${listed(names)}, ${formatText(setup.format)}.`;
 }
 
 /** The game bar's word on the match, or null for a game on its own. */

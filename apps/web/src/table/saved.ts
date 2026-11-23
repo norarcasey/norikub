@@ -1,15 +1,17 @@
 import { levelSchema } from '@norikub/core/bot';
 import { gameSchema } from '@norikub/core/game';
+import type { Game } from '@norikub/core/game';
 import { SINGLE, matchFits, matchSchema, newMatch } from '@norikub/core/match';
 import { parse } from '@norikub/core/parse';
 import { tileSchema } from '@norikub/core/tiles';
 import { resumeTurn } from '@norikub/core/turn';
 import { z } from 'zod';
 
+import { whoSchema } from './cast.ts';
 import { fitPile } from './pile.ts';
 import { RACK_ROWS, reconcileRows } from './rack.ts';
-import { FIRST_LINEUP, PERSON, fromGame } from './session.ts';
-import type { Session } from './session.ts';
+import { FIRST_LINEUP, PERSON, botNames, fromGame, seatsFor } from './session.ts';
+import type { Lineup, Session } from './session.ts';
 
 const rowsSchema = z
   .array(z.array(z.string().min(1).nullable()).readonly())
@@ -44,7 +46,16 @@ const savedFields = {
   pile: z.array(z.number().int().min(0)).readonly(),
 };
 
-const lineupSchema = z.array(levelSchema).min(1).max(3).readonly();
+const levelsSchema = z.array(levelSchema).min(1).max(3).readonly();
+
+const lineupSchema = z
+  .array(z.object({ level: levelSchema, who: whoSchema }).readonly())
+  .min(1)
+  .max(3)
+  .readonly()
+  .refine((seats) => new Set(seats.map((seat) => seat.who)).size === seats.length, {
+    message: 'two seats with one character',
+  });
 
 /**
  * Version 2 adds the lineup, the level of each bot (KUB-41). A version 1 game was played
@@ -52,20 +63,27 @@ const lineupSchema = z.array(levelSchema).min(1).max(3).readonly();
  *
  * Version 3 adds the match (KUB-42). A game saved before it was one game on its own, and
  * resumes as one.
+ *
+ * Version 4 gives each bot a character (KUB-43). An older game's bots are handed the cast in
+ * order, as a new game's would be, and are renamed for them: "Medium bot A" in the bar beside
+ * Tatum's face would be two names for one player.
  */
 export const savedSchema = z.union([
   z
-    .object({ version: z.literal(3), ...savedFields, lineup: lineupSchema, match: matchSchema })
+    .object({ version: z.literal(4), ...savedFields, lineup: lineupSchema, match: matchSchema })
     .readonly(),
-  z.object({ version: z.literal(2), ...savedFields, lineup: lineupSchema }).readonly(),
+  z
+    .object({ version: z.literal(3), ...savedFields, lineup: levelsSchema, match: matchSchema })
+    .readonly(),
+  z.object({ version: z.literal(2), ...savedFields, lineup: levelsSchema }).readonly(),
   z.object({ version: z.literal(1), ...savedFields }).readonly(),
 ]);
 export type Saved = z.infer<typeof savedSchema>;
 
-export function toSaved(session: Session): Extract<Saved, { version: 3 }> {
+export function toSaved(session: Session): Extract<Saved, { version: 4 }> {
   const { turn } = session;
   return {
-    version: 3,
+    version: 4,
     lineup: session.lineup,
     match: session.match,
     game: session.game,
@@ -85,9 +103,14 @@ export function fromSaved(input: unknown): Session | null {
   const parsed = parse(savedSchema, input);
   if (!parsed.ok) return null;
   const saved = parsed.value;
-  const { game } = saved;
-  const lineup = saved.version === 1 ? FIRST_LINEUP : saved.lineup;
-  const match = saved.version === 3 ? saved.match : newMatch(SINGLE);
+  const lineup =
+    saved.version === 1
+      ? FIRST_LINEUP
+      : saved.version === 4
+        ? saved.lineup
+        : seatsFor(saved.lineup);
+  const game = saved.version === 4 ? saved.game : named(saved.game, lineup);
+  const match = 'match' in saved ? saved.match : newMatch(SINGLE);
   // A lineup or a match for another number of seats is not this game's: one of them was
   // written wrong, and resuming would score a game nobody played.
   const seats = game.players.length;
@@ -107,5 +130,16 @@ export function fromSaved(input: unknown): Session | null {
     replay: [],
     pile: fitPile(saved.pile, game.pool.length),
     ...sitting,
+  };
+}
+
+/** The game with its bots' seats named for their characters; the person's seat keeps its name. */
+function named(game: Game, lineup: Lineup): Game {
+  const names = botNames(lineup);
+  return {
+    ...game,
+    players: game.players.map((player, seat) =>
+      seat === PERSON ? player : { ...player, name: names[seat - 1] ?? player.name },
+    ),
   };
 }

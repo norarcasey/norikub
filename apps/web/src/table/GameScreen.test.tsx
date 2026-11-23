@@ -444,7 +444,10 @@ describe('the end of the game', () => {
     fireEvent.click(within(second).getByRole('radio', { name: 'Hard' }));
     fireEvent.click(screen.getByRole('button', { name: 'New game' }));
     expect(onNewGame).toHaveBeenCalledExactlyOnceWith({
-      lineup: ['medium', 'hard'],
+      lineup: [
+        { level: 'medium', who: 'tatum' },
+        { level: 'hard', who: 'edward' },
+      ],
       format: SINGLE,
     });
   });

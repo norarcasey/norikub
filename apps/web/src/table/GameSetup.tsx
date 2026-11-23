@@ -4,7 +4,10 @@ import type { MatchFormat } from '@norikub/core/match';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { Lineup, Setup } from './session.ts';
+import { Avatar } from './Avatar.tsx';
+import { CAST, CAST_NAMES, firstFree } from './cast.ts';
+import type { Who } from './cast.ts';
+import type { BotSeat, Lineup, Setup } from './session.ts';
 
 const LABELS: Readonly<Record<Level, string>> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 
@@ -33,9 +36,9 @@ const LENGTHS: readonly { readonly kind: Length; readonly label: string }[] = [
 ];
 
 /**
- * Setting up a sitting against the bots (KUB-41, KUB-42): one to three bots and the level of
- * each, then one game, a number of games, or games until a running total reaches a score. It
- * starts on the setup just played, so the same again is one tap.
+ * Setting up a sitting against the bots (KUB-41, KUB-42, KUB-43): one to three bots, who each
+ * plays as and how well, then one game, a number of games, or games until a running total
+ * reaches a score. It starts on the setup just played, so the same again is one tap.
  *
  * The number of games and the score are kept while another length is picked, so trying "One
  * game" and coming back does not lose a 7.
@@ -57,11 +60,29 @@ export function GameSetup({
     initial.format.kind === 'points' ? initial.format.target : 200,
   );
   const id = useId();
-  const pick = (seat: number, level: Level) =>
-    setLineup(lineup.map((current, i) => (i === seat ? level : current)));
-  // A bot added plays at the level of the one before it: most tables are all one level.
+  const pickLevel = (seat: number, level: Level) =>
+    setLineup(lineup.map((current, i) => (i === seat ? { ...current, level } : current)));
+  // A character another seat has is swapped over rather than shared: two seats never wear one
+  // face, and a person picking Erik for the first bot means it, wherever Erik was sitting.
+  const pickWho = (seat: number, who: Who) => {
+    const was = lineup[seat]?.who ?? who;
+    setLineup(
+      lineup.map((current, i) =>
+        i === seat ? { ...current, who } : current.who === who ? { ...current, who: was } : current,
+      ),
+    );
+  };
+  // A bot added plays at the level of the one before it, as the next free character: most
+  // tables are all one level.
   const count = (bots: number) =>
-    setLineup(Array.from({ length: bots }, (_, i) => lineup[i] ?? lineup.at(-1) ?? 'medium'));
+    setLineup(
+      Array.from({ length: bots }).reduce<BotSeat[]>((seats, _, i) => {
+        const kept = lineup[i];
+        if (kept !== undefined) return [...seats, kept];
+        const level = seats.at(-1)?.level ?? 'medium';
+        return [...seats, { level, who: firstFree(seats.map((seat) => seat.who)) }];
+      }, []),
+    );
   const format: MatchFormat =
     length === 'games'
       ? { kind: 'games', games }
@@ -77,17 +98,38 @@ export function GameSetup({
         value={lineup.length}
         onPick={count}
       />
-      {lineup.map((level, seat) => (
-        <Choices
-          key={seat}
-          legend={SEATS[seat] ?? `Bot ${seat + 1}`}
-          name={`${id}-${seat}`}
-          options={LEVELS.map((option) => ({ value: option, label: LABELS[option] }))}
-          value={level}
-          onPick={(option) => pick(seat, option)}
-        />
+      {lineup.map((bot, seat) => (
+        <div key={seat} className="lineup-seat" role="group" aria-label={SEATS[seat]}>
+          <fieldset className="cast">
+            <legend>
+              {SEATS[seat] ?? `Bot ${seat + 1}`}: {CAST_NAMES[bot.who]}
+            </legend>
+            {CAST.map((who) => (
+              <label key={who} title={CAST_NAMES[who]}>
+                <input
+                  type="radio"
+                  name={`${id}-${seat}-who`}
+                  value={who}
+                  aria-label={CAST_NAMES[who]}
+                  checked={bot.who === who}
+                  onChange={() => pickWho(seat, who)}
+                />
+                <Avatar who={who} size={44} />
+              </label>
+            ))}
+          </fieldset>
+          <Choices
+            legend="Plays"
+            name={`${id}-${seat}`}
+            options={LEVELS.map((option) => ({ value: option, label: LABELS[option] }))}
+            value={bot.level}
+            onPick={(option) => pickLevel(seat, option)}
+          />
+        </div>
       ))}
-      <p className="lineup-hint">{[...new Set(lineup)].map((level) => HINTS[level]).join(' ')}</p>
+      <p className="lineup-hint">
+        {[...new Set(lineup.map((bot) => bot.level))].map((level) => HINTS[level]).join(' ')}
+      </p>
       <Choices
         legend="Play"
         name={`${id}-length`}

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <clipPath id="frame"><circle cx="50" cy="50" r="47"/></clipPath>
+    <pattern id="plaid" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-8)">
+      <rect width="12" height="12" fill="#f4ede6"/>
+      <rect x="0" y="3" width="12" height="4" fill="#c8453a" opacity="0.8"/>
+      <rect x="3" y="0" width="4" height="12" fill="#c8453a" opacity="0.6"/>
+      <rect x="0" y="9" width="12" height="1" fill="#8e2f28" opacity="0.6"/>
+    </pattern>
+  </defs>
+  <circle cx="50" cy="50" r="47" fill="#a9cf98"/>
+  <g clip-path="url(#frame)" stroke="#2d1e1b" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M4 30 C 10 26 16 28 18 34 C 12 36 6 34 4 30 Z M 88 18 C 94 16 98 20 98 24 C 92 26 88 22 88 18 Z M 6 62 C 12 58 18 60 18 66 C 12 68 8 66 6 62 Z" fill="#6f9e5c" stroke="none"/>
+    <path d="M16 10 L 18 100 M 92 30 L 90 100" fill="none" stroke="#8fb47e" stroke-width="3"/>
+    <path d="M40 22 C 30 22 26 32 26 46 C 26 60 24 70 26 80 L 80 80 C 82 70 80 60 80 46 C 80 32 74 22 64 22 Z" fill="#b5673b"/>
+    <path d="M14 100 C 16 84 28 74 42 72 L 70 72 C 84 74 94 84 96 100 Z" fill="url(#plaid)"/>
+    <path d="M48 72 L 56 92 L 64 72 Z" fill="#f2c9b2"/>
+    <path d="M42 72 L 50 86 L 52 74 Z M 70 72 L 62 86 L 60 74 Z" fill="#efe7df"/>
+    <path d="M51 82 C 54 84 58 84 61 82" fill="none" stroke-width="1.2"/>
+    <path d="M48 62 L 48 74 C 52 78 60 78 64 74 L 64 62 Z" fill="#efc3aa"/>
+    <path d="M56 24 C 70 24 76 34 76 46 C 76 60 68 68 57 68 C 46 68 38 60 38 46 C 38 34 44 24 56 24 Z" fill="#f6d4bf"/>
+    <path d="M36 44 C 34 28 44 18 57 18 C 70 18 80 28 78 46 C 78 40 76 38 75 37 C 70 36 62 36 56 37 C 48 38 42 38 38 37 C 37 39 36 41 36 44 Z" fill="#c2733f"/>
+    <path d="M38 37 L 40 46 M 76 37 L 76 52 C 78 62 80 70 80 80 M 38 44 C 36 56 34 66 32 78" fill="none" stroke="#8f4f2a" stroke-width="1.6"/>
+    <path d="M46 26 C 44 30 44 34 45 37 M 54 24 C 53 28 53 32 54 36 M 63 25 C 64 29 64 33 63 36 M 70 28 C 72 32 72 34 72 37" fill="none" stroke="#9b5a30" stroke-width="1.3"/>
+    <ellipse cx="78" cy="53" rx="1.4" ry="1.4" fill="#f5f0e6" stroke-width="0.8"/>
+    <path d="M47 45 C 49 43 52 43 54 45 M 62 45 C 64 43 67 43 69 45" fill="none" stroke-width="2"/>
+    <ellipse cx="51" cy="48" rx="2.6" ry="2.4" fill="#2d1e1b" stroke="none"/>
+    <ellipse cx="66" cy="48" rx="2.6" ry="2.4" fill="#2d1e1b" stroke="none"/>
+    <circle cx="52" cy="47" r="0.9" fill="#fff" stroke="none"/>
+    <circle cx="67" cy="47" r="0.9" fill="#fff" stroke="none"/>
+    <path d="M46 41 C 49 39 53 39 55 40 M 62 40 C 65 39 68 39 70 41" fill="none" stroke="#8f4f2a" stroke-width="2"/>
+    <path d="M59 47 C 58 51 57 54 59 55 C 60 56 62 56 63 55" fill="none" stroke="#c8957a" stroke-width="1.8"/>
+    <path d="M55 61 C 55 58 61 57 62 60 C 63 63 60 65 58 64 C 56 64 55 63 55 61 Z" fill="#d8786e" stroke-width="1.8"/>
+    <path d="M57 60.5 C 58 60 60 60 60.6 61" fill="none" stroke-width="1"/>
+    <ellipse cx="46" cy="56" rx="4" ry="2.4" fill="#f09a8a" stroke="none" opacity="0.6"/>
+    <ellipse cx="71" cy="56" rx="4" ry="2.4" fill="#f09a8a" stroke="none" opacity="0.6"/>
+    <path d="M18 30 L 42 100 L 50 100 L 26 28 Z" fill="#e2bd86"/>
+    <path d="M22 40 L 30 62" fill="none" stroke="#c29a62" stroke-width="1.2"/>
+    <path d="M14 26 C 16 22 22 18 28 18 L 30 26 L 20 34 Z" fill="#7d858d"/>
+    <path d="M18 22 C 12 20 6 18 4 14 C 2 24 4 36 8 44 C 12 40 16 36 22 34 Z" fill="#cdd3d8"/>
+    <path d="M4 14 C 2 24 4 36 8 44 L 11 42 C 8 34 7 24 8 16 Z" fill="#f1f4f6"/>
+    <path d="M13 26 C 15 25 17 26 18 28" fill="none" stroke="#9aa2a9" stroke-width="1.4"/>
+    <path d="M22 46 C 20 42 22 38 28 38 C 34 38 38 42 38 48 C 38 54 34 58 28 58 C 24 58 21 54 22 50 Z" fill="#d49a4c"/>
+    <path d="M24 44 C 28 44 34 42 37 44 M 23 49 C 28 49 33 48 37 49 M 24 54 C 28 54 32 53 35 54" fill="none" stroke="#a8742e" stroke-width="1.3"/>
+    <path d="M26 58 C 26 62 34 64 36 60 L 36 56" fill="#c48a3e"/>
+  </g>
+  <circle cx="50" cy="50" r="47" fill="none" stroke="#2d1e1b" stroke-width="3"/>
+</svg>

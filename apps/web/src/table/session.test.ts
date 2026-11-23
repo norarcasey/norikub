@@ -12,6 +12,7 @@ import {
   newSession,
   nextGame,
   probe,
+  seatsFor,
   setupOf,
   undoTurn,
 } from './session.ts';
@@ -36,19 +37,39 @@ function session(): Session {
   );
 }
 
-describe('the bots at the table (KUB-41)', () => {
-  it('are named by level, lettered when two share one', () => {
-    expect(botNames(['easy', 'hard'])).toEqual(['Easy bot', 'Hard bot']);
-    expect(botNames(['medium', 'medium'])).toEqual(['Medium bot A', 'Medium bot B']);
+describe('the bots at the table (KUB-41, KUB-43)', () => {
+  it('are named for their characters', () => {
+    expect(
+      botNames([
+        { level: 'easy', who: 'erik' },
+        { level: 'easy', who: 'asabo' },
+      ]),
+    ).toEqual(['Erik', 'Asa & Bo']);
+  });
+
+  it('are each given a character no other seat has', () => {
+    expect(seatsFor(['medium', 'medium', 'hard'])).toEqual([
+      { level: 'medium', who: 'tatum' },
+      { level: 'medium', who: 'edward' },
+      { level: 'hard', who: 'erik' },
+    ]);
   });
 
   it('play the seats at the levels picked', () => {
     // The person draws; each bot then plays its turn at its own level before the next.
-    const s = newSession(7, { lineup: ['hard', 'easy'], format: SINGLE });
-    expect(s.lineup).toEqual(['hard', 'easy']);
-    expect(s.game.players.map((player) => player.name)).toEqual(['You', 'Hard bot', 'Easy bot']);
+    const lineup = [
+      { level: 'hard', who: 'nora' },
+      { level: 'easy', who: 'tatum' },
+    ] as const;
+    const s = newSession(7, { lineup, format: SINGLE });
+    expect(s.lineup).toEqual(lineup);
+    expect(s.game.players.map((player) => player.name)).toEqual([
+      'You',
+      'Lumber Jill Nora',
+      'Tatum',
+    ]);
     const next = drawTile(s);
-    expect(next.lineup).toEqual(['hard', 'easy']);
+    expect(next.lineup).toEqual(lineup);
     expect(next.game.current).toBe(0);
   });
 });
@@ -61,7 +82,8 @@ describe('a match (KUB-42)', () => {
   });
 
   it('seats one to three bots', () => {
-    for (const lineup of [['easy'], ['easy', 'medium', 'hard']] as const) {
+    for (const levels of [['easy'], ['easy', 'medium', 'hard']] as const) {
+      const lineup = seatsFor(levels);
       const s = newSession(7, { lineup, format: SINGLE });
       expect(s.game.players).toHaveLength(lineup.length + 1);
       expect(s.turn?.rack).toHaveLength(14);
@@ -69,19 +91,25 @@ describe('a match (KUB-42)', () => {
   });
 
   it('deals the next game against the same bots, with the last one’s scores kept', () => {
-    const s = newSession(7, { lineup: ['hard', 'easy'], format: { kind: 'games', games: 2 } });
+    const s = newSession(7, {
+      lineup: seatsFor(['hard', 'easy']),
+      format: { kind: 'games', games: 2 },
+    });
     const next = nextGame(finished(s, [20, -5, -15]), 8);
-    expect(next?.lineup).toEqual(['hard', 'easy']);
+    expect(next?.lineup).toEqual(seatsFor(['hard', 'easy']));
     expect(next?.match.played).toEqual([[20, -5, -15]]);
     expect(next?.game.status.kind).toBe('playing');
     expect(setupOf(next ?? s)).toEqual({
-      lineup: ['hard', 'easy'],
+      lineup: seatsFor(['hard', 'easy']),
       format: { kind: 'games', games: 2 },
     });
   });
 
   it('deals no next game mid-game, or once the match is over', () => {
-    const s = newSession(7, { lineup: ['hard', 'easy'], format: { kind: 'games', games: 2 } });
+    const s = newSession(7, {
+      lineup: seatsFor(['hard', 'easy']),
+      format: { kind: 'games', games: 2 },
+    });
     expect(nextGame(s, 8)).toBeNull();
     const second = nextGame(finished(s, [20, -5, -15]), 8);
     if (second === null) throw new Error('no second game');
@@ -90,7 +118,10 @@ describe('a match (KUB-42)', () => {
   });
 
   it('carries the match through a turn', () => {
-    const s = newSession(7, { lineup: ['hard', 'easy'], format: { kind: 'points', target: 200 } });
+    const s = newSession(7, {
+      lineup: seatsFor(['hard', 'easy']),
+      format: { kind: 'points', target: 200 },
+    });
     expect(drawTile(s).match).toEqual(s.match);
   });
 });

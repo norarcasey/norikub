@@ -350,6 +350,7 @@ export function friendsBoard(state: Friends): Board | null {
     notes: state.notes,
     replay: state.replay,
     away: counts.map((_, seat) => isAway(state, seat)),
+    faces: counts.map(() => null),
   };
 }
 

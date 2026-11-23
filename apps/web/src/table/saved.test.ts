@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { SINGLE } from '../../../../packages/core/src/match.ts';
-import { moveTile, newSession, nextGame } from './session.ts';
+import { moveTile, newSession, nextGame, seatsFor } from './session.ts';
 import { fromSaved, toSaved } from './saved.ts';
 
 // Through JSON, as the store keeps it: a field that survives only as an object reference
@@ -48,19 +48,52 @@ describe('a saved session', () => {
   });
 
   it('keeps the bots picked for the game (KUB-41)', () => {
-    const picked = newSession(7, { lineup: ['easy', 'hard'], format: SINGLE });
-    expect(fromSaved(reloaded(toSaved(picked)))?.lineup).toEqual(['easy', 'hard']);
+    const lineup = [
+      { level: 'easy', who: 'michael' },
+      { level: 'hard', who: 'fuzzy' },
+    ] as const;
+    const picked = newSession(7, { lineup, format: SINGLE });
+    expect(fromSaved(reloaded(toSaved(picked)))?.lineup).toEqual(lineup);
+  });
+
+  it('is refused when two of its bots are one character (KUB-43)', () => {
+    const saved = toSaved(midTurn);
+    const twins = [
+      { level: 'easy', who: 'erik' },
+      { level: 'hard', who: 'erik' },
+    ];
+    expect(fromSaved(reloaded({ ...saved, lineup: twins }))).toBeNull();
+  });
+
+  it('gives a game saved before characters its bots in cast order, renamed for them', () => {
+    const { game, turn, rows, startRows, pile, match } = toSaved(midTurn);
+    const old = {
+      ...game,
+      players: game.players.map((player, seat) =>
+        seat === 0 ? player : { ...player, name: `Hard bot ${'AB'.charAt(seat - 1)}` },
+      ),
+    };
+    const lineup = ['hard', 'hard'];
+    const back = fromSaved(
+      reloaded({ version: 3, game: old, turn, rows, startRows, pile, lineup, match }),
+    );
+    expect(back?.lineup).toEqual(seatsFor(['hard', 'hard']));
+    expect(back?.game.players.map((player) => player.name)).toEqual(['You', 'Tatum', 'Edward']);
+    expect(back?.turn?.rack).toEqual(midTurn.turn?.rack);
   });
 
   it('resumes a game saved before bots had levels against the medium bot it was playing', () => {
     const { game, turn, rows, startRows, pile } = toSaved(midTurn);
     const back = fromSaved(reloaded({ version: 1, game, turn, rows, startRows, pile }));
-    expect(back?.lineup).toEqual(['medium', 'medium']);
+    expect(back?.lineup).toEqual(seatsFor(['medium', 'medium']));
     expect(back?.turn).toEqual(midTurn.turn);
   });
 
   it('keeps the match, its games played and its format (KUB-42)', () => {
-    const three = newSession(7, { lineup: ['easy', 'hard'], format: { kind: 'games', games: 3 } });
+    const three = newSession(7, {
+      lineup: seatsFor(['easy', 'hard']),
+      format: { kind: 'games', games: 3 },
+    });
     const second = nextGame(
       { ...three, game: { ...three.game, status: overStatus() }, turn: null },
       8,
@@ -71,14 +104,15 @@ describe('a saved session', () => {
   });
 
   it('resumes a game saved before matches as one game on its own', () => {
-    const { game, turn, rows, startRows, pile, lineup } = toSaved(midTurn);
+    const { game, turn, rows, startRows, pile } = toSaved(midTurn);
+    const lineup = ['medium', 'medium'];
     const back = fromSaved(reloaded({ version: 2, game, turn, rows, startRows, pile, lineup }));
     expect(back?.match).toEqual({ format: { kind: 'single' }, played: [] });
   });
 
   it('is refused when its lineup or its match is for another number of seats', () => {
     const saved = toSaved(midTurn);
-    expect(fromSaved(reloaded({ ...saved, lineup: ['easy'] }))).toBeNull();
+    expect(fromSaved(reloaded({ ...saved, lineup: seatsFor(['easy']) }))).toBeNull();
     const match = { format: SINGLE, played: [[10, -10]] };
     expect(fromSaved(reloaded({ ...saved, match }))).toBeNull();
   });

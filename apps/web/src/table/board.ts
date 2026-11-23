@@ -3,6 +3,7 @@ import { rackPenalty } from '@norikub/core/tiles';
 import type { Tile } from '@norikub/core/tiles';
 import type { Move, MoveRefusal } from '@norikub/core/turn';
 
+import type { Who } from './cast.ts';
 import type { DropTarget } from './drag.ts';
 import { fitPile } from './pile.ts';
 import type { Pile } from './pile.ts';
@@ -42,6 +43,11 @@ export type Board = {
    * table has anyone away; the bots are always here.
    */
   readonly away: readonly boolean[];
+  /**
+   * The face drawn beside each seat's name, by seat (`KUB-43`): a bot's character, null for a
+   * person. Only the bots have faces.
+   */
+  readonly faces: readonly (Who | null)[];
 };
 
 /** What the screen can ask for. Each goes to the engine, never decided by the screen. */
@@ -74,6 +80,9 @@ export function boardOf(session: Session): Board {
     notes: session.notes,
     replay: session.replay,
     away: game.players.map(() => false),
+    faces: game.players.map((_, seat) =>
+      seat === PERSON ? null : (session.lineup[seat - 1]?.who ?? null),
+    ),
   };
 }
 
