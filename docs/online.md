@@ -1,8 +1,8 @@
 # Playing friends online
 
 Decided in `KUB-12`, 22 Nov 2026: **one Cloudflare Durable Object per table, as Hanora
-does it.** Nora reviews it with the ticket. Nothing here is built yet; the tickets that build
-it are listed at the end.
+does it.** Nora reviews it with the ticket. The core's half (`KUB-32`) and the host
+(`KUB-33`) are built; the tickets that build the rest are listed at the end.
 
 ## Why not compare the hosts again
 
