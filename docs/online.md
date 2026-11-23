@@ -43,6 +43,29 @@ What Norikub needs that Hanora did not is in **What is Norikub's own**, below.
   `wrangler deploy` from the laptop: invariant 5 then covers both hosts.
 - **`pnpm dev`** runs Vite and `wrangler dev` together, with no account.
 
+## Deploying it
+
+Built in `KUB-33`. `apps/game/wrangler.jsonc` names the Worker `norikub-game` and its object
+class `Table`, created by a `new_sqlite_classes` migration (the Free plan has only SQLite
+objects). `pnpm dev` runs Vite and `wrangler dev` together; the page finds the host at
+`VITE_GAME_SERVER`, or `http://localhost:8787` in dev (`apps/web/src/online/gameServer.ts`).
+`apps/game/test/worker.test.ts` starts the Worker in workerd through the pinned wrangler's
+`createTestHarness` and runs in the gate.
+
+### Turning it on (Nora)
+
+On the Cloudflare account Hanora's host is already on (`noratsu.workers.dev`):
+
+1. An API token from the "Edit Cloudflare Workers" template, limited to that account.
+   Hanora's token works if it is scoped to the account rather than to one Worker.
+2. In GitHub, this repository's environment `production`: secrets `CLOUDFLARE_API_TOKEN`
+   and `CLOUDFLARE_ACCOUNT_ID`. Then the repository variable `ENABLE_CLOUDFLARE_DEPLOY` =
+   `true`.
+3. Push (or re-run CI on `main`). The `deploy-game` log prints the Worker's address,
+   `https://norikub-game.noratsu.workers.dev`.
+4. Set the repository variable `GAME_SERVER_URL` to that address, and re-run CI so the page
+   is built knowing it.
+
 ## What is Norikub's own
 
 ### A turn is shared while it is played

@@ -24,11 +24,20 @@ export default defineConfig({
           environment: 'node',
         },
       },
+      {
+        // Node, not @cloudflare/vitest-pool-workers: the pool needs vitest 4 and this repo is
+        // on 5, as Hanora found (HAN-13, 15 Nov 2026). worker.test.ts starts the real Worker in
+        // workerd through wrangler instead.
+        test: { name: 'game', include: ['apps/game/test/**/*.test.ts'], environment: 'node' },
+      },
     ],
     coverage: {
       provider: 'v8',
-      include: ['packages/core/src/**/*.ts'],
-      exclude: ['**/*.test.ts'],
+      // The game host's plain modules join the core here. Its Durable Object and Worker entry
+      // run inside workerd, where v8 coverage in this process cannot see them; worker.test.ts
+      // is their test, through the wire.
+      include: ['packages/core/src/**/*.ts', 'apps/game/src/**/*.ts'],
+      exclude: ['**/*.test.ts', 'apps/game/src/host.ts', 'apps/game/src/worker.ts'],
       // The thresholds gate the pure layer and nothing else. A percentage on the React app
       // buys tests written to satisfy the percentage. A glob threshold is measured across
       // every file it matches rather than per file, which is why this is one entry for the

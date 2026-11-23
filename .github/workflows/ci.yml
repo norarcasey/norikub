@@ -78,4 +78,37 @@ jobs:
       - run: vercel build --prod --token="$VERCEL_TOKEN"
         env:
           EXPERIMENTAL_NODE_TYPESCRIPT_ERRORS: '1'
+          # Where the page finds the game host (apps/web/src/online/gameServer.ts): the
+          # Worker's workers.dev address, which Cloudflare gives on its first deploy. Unset,
+          # the page says it has no game host rather than guessing one.
+          VITE_GAME_SERVER: ${{ vars.GAME_SERVER_URL }}
       - run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+  # The game host (apps/game, docs/online.md), the second production host. Invariant 5 covers
+  # it as it covers Vercel: CI behind the gate is the only way it is deployed.
+  #
+  # Not chained to `deploy`: either can be off while its secrets are missing, and a `needs`
+  # between them would skip the one that is ready. Until the protocol between them changes
+  # shape that is safe; once it does, the Worker must accept both shapes for one deploy.
+  deploy-game:
+    needs: [gate]
+    # Off until the repository variable ENABLE_CLOUDFLARE_DEPLOY is 'true', set once the two
+    # secrets below exist in the `production` environment (docs/online.md, "Deploying it").
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+      vars.ENABLE_CLOUDFLARE_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: deploy-game-production
+      cancel-in-progress: false
+    timeout-minutes: 10
+    env:
+      # Scoped to editing Workers on the one account Hanora's host is on, nothing else.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      # The wrangler pinned in package.json, so a deploy uses the same build as the tests.
+      - run: pnpm exec wrangler deploy --config apps/game/wrangler.jsonc

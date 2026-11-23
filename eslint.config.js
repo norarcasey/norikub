@@ -26,6 +26,7 @@ export default defineConfig(
       '**/node_modules/**',
       '.claude/worktrees/**',
       '.vercel/**',
+      '**/.wrangler/**',
     ],
   },
   js.configs.recommended,
@@ -90,6 +91,26 @@ export default defineConfig(
               message:
                 'A deployed function cannot resolve a workspace package. Import by relative path: ../packages/core/src/<file>.ts',
             },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // The game host is bundled by wrangler from its own entry, and imports the core by
+    // relative path like a function does, so a deploy never depends on how a workspace
+    // package resolves. It runs in workerd: a Node built-in would fail only once deployed.
+    files: ['apps/game/src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@norikub/*'],
+              message: 'Import the core by relative path: ../../../packages/core/src/<file>.ts',
+            },
+            { group: ['node:*'], message: 'The game host runs in workerd, not Node.' },
           ],
         },
       ],

@@ -87,6 +87,9 @@ apps/web/src/device/
 apps/mac          the Mac app: a native window onto the same apps/web build. Swift, built by
                   `pnpm app:install`, never by the gate or CI. `shell/App.swift` is the one
                   file the app edits
+apps/game         the game host for friends' tables: a Cloudflare Worker, one Durable Object
+                  per table, running packages/core by relative path. Deployed by CI's
+                  `deploy-game` only; docs/online.md has how it is turned on
 api/              Vercel functions — every .ts is one, except under a `_` path
 scripts/db/       `db:env` only: points apps/web at CruciNora's local stack. Norikub's
                   migrations, their checks and the stack are in ~/src/crucinora

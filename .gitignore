@@ -12,3 +12,6 @@ coverage/
 .claude/worktrees/
 .vercel/
 apps/mac/build/
+# wrangler's local state: `wrangler dev`'s tables and its build output, and its secrets.
+.wrangler/
+.dev.vars*

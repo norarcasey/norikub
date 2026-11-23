@@ -1,0 +1,8 @@
+{
+  // The game host's tests run in Node: the unit tests import the plain modules, and the
+  // end-to-end test starts the Worker in workerd through wrangler and talks to it over real
+  // sockets. Workers types stay out, or their `Response` and Node's would collide.
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2023"], "types": ["node"] },
+  "include": ["**/*.ts"]
+}

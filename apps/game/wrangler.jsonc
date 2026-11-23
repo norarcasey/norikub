@@ -1,0 +1,27 @@
+// The game host: one Durable Object per friends' table (docs/online.md, KUB-33). Deployed only
+// by CI's `deploy-game` job (invariant 5); `pnpm dev` runs it locally with no account.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "norikub-game",
+  "main": "src/worker.ts",
+  // No later than the workerd the pinned wrangler ships (1.20261102.1), or `wrangler dev`
+  // refuses it. Hanora's, measured with the same wrangler (HAN-13).
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  // wrangler's usage telemetry, off: nothing about this project needs to leave the laptop or CI.
+  "send_metrics": false,
+  "durable_objects": {
+    "bindings": [{ "name": "TABLE", "class_name": "Table" }],
+  },
+  // The Free plan has only SQLite-backed objects, so the class is created as one. A tag, once
+  // deployed, is never edited: a change to the class list is a new entry.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Table"] }],
+  "vars": {
+    // The site's origins, comma-separated, that may open a table. localhost is allowed in code
+    // (src/origin.ts). norikub.vercel.app is the production alias CI's deploy printed on
+    // 22 Nov 2026; a custom domain, when there is one, joins it here and this one stays, since
+    // a seat token lives in the origin's own storage.
+    "SITE_ORIGINS": "https://norikub.vercel.app",
+  },
+}

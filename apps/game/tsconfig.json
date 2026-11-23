@@ -1,0 +1,8 @@
+{
+  // Workers types and no DOM: the Worker runs in workerd, which has `fetch` and
+  // `WebSocketPair` but no `document`, and a Node global used here would fail only once
+  // deployed. The tests run in Node and have their own project in test/.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "lib": ["ES2023"], "types": ["@cloudflare/workers-types"] },
+  "include": ["src/**/*.ts"]
+}
