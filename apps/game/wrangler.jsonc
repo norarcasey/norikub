@@ -19,9 +19,11 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Table"] }],
   "vars": {
     // The site's origins, comma-separated, that may open a table. localhost is allowed in code
-    // (src/origin.ts). norikub.vercel.app is the production alias CI's deploy printed on
-    // 22 Nov 2026; a custom domain, when there is one, joins it here and this one stays, since
-    // a seat token lives in the origin's own storage.
-    "SITE_ORIGINS": "https://norikub.vercel.app",
+    // (src/origin.ts). norikub.crucinora.com is the site's own domain and the Mac app's home;
+    // norikub.vercel.app is the production alias CI's deploy printed on 22 Nov 2026, and stays,
+    // since a seat token lives in the origin's own storage. Every origin the site is served
+    // from has to be here: one missing turns every Sit down there into "could not be reached"
+    // (KUB-46, 22 Nov 2026).
+    "SITE_ORIGINS": "https://norikub.crucinora.com, https://norikub.vercel.app",
   },
 }

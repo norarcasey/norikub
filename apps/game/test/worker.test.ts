@@ -157,6 +157,22 @@ describe('the Worker', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(SITE);
   });
 
+  // The origins production serves the page from, as the committed config lists them. A site
+  // domain left out refused every seat there and looked like a dropped connection (KUB-46).
+  it.each(['https://norikub.crucinora.com', 'https://norikub.vercel.app'])(
+    'seats a page served from %s',
+    async (origin) => {
+      const code = freshCode();
+      const preflight = await fetch(new URL(`/tables/${code}/join`, base), {
+        method: 'OPTIONS',
+        headers: { Origin: origin },
+      });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+      expect((await sitDown(code, 'Nora', origin)).status).toBe(200);
+    },
+  );
+
   it('refuses a name that is not one, and a fifth seat', async () => {
     const code = freshCode();
     expect((await sitDown(code, '')).status).toBe(400);
