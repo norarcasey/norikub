@@ -1,9 +1,9 @@
-import type { Game, Status } from '@norikub/core/game';
+import type { Status } from '@norikub/core/game';
+import type { Refusal, TableRefusal } from '@norikub/core/table';
 import type { Tile } from '@norikub/core/tiles';
 import type { MoveRefusal, TurnFault } from '@norikub/core/turn';
 
 import type { Frame } from './replay.ts';
-import { PERSON } from './session.ts';
 import type { Note } from './session.ts';
 
 export function tileName(tile: Tile): string {
@@ -55,25 +55,67 @@ export function noteText(note: Note): string {
       return note.tile === null
         ? 'The pool is empty, so you passed.'
         : `You drew the ${tileName(note.tile)}.`;
-    case 'bot':
+    case 'played':
       return note.played === 0
         ? `${note.name} drew a tile.`
         : `${note.name} played ${note.played} tile${note.played === 1 ? '' : 's'}.`;
+    case 'host':
+      return hostRefusalText(note.refusal);
   }
 }
 
-export function frameText(frame: Frame): string {
+/** What a friends' table's host refused, in words. A move or a fault reads as against the bots. */
+export function hostRefusalText(refusal: Refusal): string {
+  switch (refusal.kind) {
+    case 'not-a-message':
+      return 'The table did not understand that. Reload to catch up.';
+    case 'table':
+      return tableRefusalText(refusal.refusal);
+    case 'move':
+      return refusalText(refusal.refusal);
+    case 'end-turn':
+      return refusal.faults.map(faultText).join(' ');
+    case 'draw':
+      return refusal.refusal === 'game-over'
+        ? 'The game is over.'
+        : 'That tile has already been drawn. Pick another.';
+  }
+}
+
+export function tableRefusalText(refusal: TableRefusal): string {
+  switch (refusal.kind) {
+    case 'table-full':
+      return 'This table is full: four players have sat down.';
+    case 'already-dealt':
+      return 'The game at this table has already been dealt.';
+    case 'not-dealt':
+      return 'The tiles have not been dealt yet.';
+    case 'waiting-for-players':
+      return 'Wait for at least one more player to sit down.';
+    case 'only-the-first-seat-deals':
+      return 'The first player to sit down deals.';
+    case 'no-such-seat':
+      return 'You have no seat at this table.';
+    case 'not-your-turn':
+      return 'It is not your turn.';
+    case 'game-over':
+      return 'The game is over.';
+  }
+}
+
+/** `you` is the seat this screen plays from: 0 against the bots, any seat at a friends' table. */
+export function frameText(frame: Frame, you: number): string {
   switch (frame.step.kind) {
     case 'placed':
       return `${frame.name} plays the ${tileName(frame.step.tile)}.`;
     case 'drawing':
-      return frame.seat === PERSON ? 'You draw a tile.' : `${frame.name} draws a tile.`;
+      return frame.seat === you ? 'You draw a tile.' : `${frame.name} draws a tile.`;
     case 'drew':
       return frame.step.face === null
         ? `${frame.name} drew a tile.`
         : `You drew the ${tileName(frame.step.face)}.`;
     case 'passed':
-      return frame.seat === PERSON
+      return frame.seat === you
         ? 'The pool is empty, so you passed.'
         : `The pool is empty, so ${frame.name} passed.`;
     case 'done':
@@ -83,14 +125,14 @@ export function frameText(frame: Frame): string {
 
 type Over = Extract<Status, { kind: 'over' }>;
 
-export function winnerText(game: Game, over: Over): string {
-  return over.winner === PERSON ? 'You won.' : `${game.players[over.winner]?.name ?? 'A bot'} won.`;
+export function winnerText(names: readonly string[], over: Over, you: number): string {
+  return over.winner === you ? 'You won.' : `${names[over.winner] ?? 'Another player'} won.`;
 }
 
-export function overText(over: Over): string {
+export function overText(over: Over, you: number): string {
   switch (over.reason) {
     case 'rack-emptied':
-      return over.winner === PERSON ? 'You played your last tile.' : 'They played their last tile.';
+      return over.winner === you ? 'You played your last tile.' : 'They played their last tile.';
     case 'pool-exhausted':
       return 'The pool ran out and nobody could play, so the lowest rack wins.';
   }

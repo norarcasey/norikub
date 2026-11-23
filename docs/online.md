@@ -190,7 +190,17 @@ Filed from `KUB-12`, in order:
 2. `KUB-33` The game host in `apps/game`, deployed by CI. Needs Nora: the Cloudflare secrets
    in this repository's `production` environment and a **Shipit**.
 3. `KUB-34` The page's table at `/t/<code>`: start a table, send the link, sit down by name,
-   deal and play. The bot game on the device stays as it is.
+   deal and play. The bot game on the device stays as it is. Built: the table screen draws a
+   `Board` (`apps/web/src/table/board.ts`), one seat's sight of the game, which the bot game
+   makes from its session and a friends' table from the host's view
+   (`apps/web/src/online/friends.ts`), so the screen never holds a `Game` it could leak. The
+   mover's page runs core's `move` on its own view (`moveInView`) and counts the messages the
+   host has not answered; every message is answered to its sender with exactly one view or
+   one refusal, so the host's view is shown again as soon as the count is back to nought.
+   `e2e/friends.spec.ts` (`pnpm e2e`, in `verify`) plays a whole game with three browsers
+   through `wrangler dev` and reads every frame each was sent. `bot-turn` is parsed and not
+   yet played back: no host sends it until `KUB-36`, whose playback can take each played
+   tile from the table in the view that follows, since a bot's moves name tiles by id.
 4. `KUB-35` Who is here, and coming back to your seat.
 5. `KUB-36` Bots in the empty seats of a friends' table.
 6. `KUB-37` A player who is away does not stall the table (Nora's choice).

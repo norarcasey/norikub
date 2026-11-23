@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { seatView, statusSchema } from './game.ts';
 import type { Game, SeatView } from './game.ts';
 import { tileSchema } from './tiles.ts';
-import type { Turn } from './turn.ts';
+import { move } from './turn.ts';
+import type { Move, MoveRefusal, Turn } from './turn.ts';
 
 const tilesSchema = z.array(tileSchema).readonly();
 const tableTilesSchema = z.array(tilesSchema).readonly();
@@ -71,5 +72,33 @@ export function turnView(game: Game, turn: Turn | null, seat: number): TurnView 
       o.seat === turn.seat ? { ...o, tileCount: turn.rack.length } : o,
     ),
     turn: { seat: turn.seat, began: game.table },
+  };
+}
+
+export type ViewMoveResult =
+  | { readonly ok: true; readonly view: TurnView }
+  | { readonly ok: false; readonly refusal: MoveRefusal };
+
+/**
+ * A move made on the mover's own view, by the engine's `move`: what the page shows at once
+ * while the same move is on its way to the host, whose next view replaces it
+ * (`docs/online.md`, "A turn is shared while it is played"). A seat whose turn it is not has
+ * no tile it may move, so it is refused as a tile that is not there.
+ */
+export function moveInView(view: TurnView, m: Move): ViewMoveResult {
+  if (view.status.kind !== 'playing' || view.current !== view.seat) {
+    return { ok: false, refusal: { kind: 'no-such-tile', tileId: m.tileId } };
+  }
+  const began = view.turn?.began ?? view.table;
+  const moved = move({ start: { table: began }, rack: view.rack, table: view.table }, m);
+  if (!moved.ok) return moved;
+  return {
+    ok: true,
+    view: {
+      ...view,
+      rack: moved.turn.rack,
+      table: moved.turn.table,
+      turn: { seat: view.seat, began },
+    },
   };
 }

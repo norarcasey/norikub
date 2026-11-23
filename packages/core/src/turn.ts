@@ -51,9 +51,19 @@ export const moveRefusalSchema = z.discriminatedUnion('kind', [
 ]);
 export type MoveRefusal = z.infer<typeof moveRefusalSchema>;
 
-export type MoveResult =
-  | { readonly ok: true; readonly turn: Turn }
-  | { readonly ok: false; readonly refusal: MoveRefusal };
+/**
+ * What `move` reads of a turn: the working rack and table, and the table the turn began with.
+ * A `Turn` is one; so is a friend's view of their own turn (`moveInView` in `view.ts`), which
+ * has no game behind it, so the page and the host run this one rule (invariant 1).
+ */
+export type Working = {
+  readonly start: { readonly table: readonly (readonly Tile[])[] };
+  readonly rack: readonly Tile[];
+  readonly table: readonly (readonly Tile[])[];
+};
+
+export type MoveResult<T extends Working = Turn> =
+  { readonly ok: true; readonly turn: T } | { readonly ok: false; readonly refusal: MoveRefusal };
 
 export function startTurn(game: Game): Turn {
   const player = game.players[game.current];
@@ -74,7 +84,7 @@ export function drawInstead(turn: Turn, pick?: number): DrawResult {
   return draw(turn.start, pick);
 }
 
-export function move(turn: Turn, m: Move): MoveResult {
+export function move<T extends Working>(turn: T, m: Move): MoveResult<T> {
   const inRack = turn.rack.findIndex((tile) => tile.id === m.tileId);
   const setIndex = turn.table.findIndex((set) => set.some((tile) => tile.id === m.tileId));
   const tile = turn.rack[inRack] ?? turn.table[setIndex]?.find((t) => t.id === m.tileId);
@@ -103,7 +113,7 @@ export function move(turn: Turn, m: Move): MoveResult {
   return { ok: true, turn: { ...turn, rack, table: table.filter((set) => set.length > 0) } };
 }
 
-function beganOnTable(turn: Turn, tileId: string): boolean {
+function beganOnTable(turn: Working, tileId: string): boolean {
   return turn.start.table.some((set) => set.some((tile) => tile.id === tileId));
 }
 

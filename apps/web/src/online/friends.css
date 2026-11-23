@@ -1,0 +1,121 @@
+/*
+ * Sitting down at a friends' table and waiting for the deal, in the table's own tokens
+ * (table/table.css), as the sign-in panel is (account/account.css).
+ */
+.lobby-wrap {
+  display: flex;
+  justify-content: center;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: calc(env(safe-area-inset-top) + 32px) 16px 16px;
+  background: var(--felt);
+  color: var(--text);
+}
+
+.lobby {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 420px;
+  align-self: flex-start;
+  padding: 16px;
+  border: 1px solid var(--felt-edge);
+  border-radius: 12px;
+  background: var(--felt-edge);
+  /* The table turns selection off for its long presses; a link to send should copy. */
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.lobby h2,
+.lobby h3,
+.lobby p,
+.lobby ol {
+  margin: 0;
+}
+
+.lobby h2 {
+  font-size: 1.25rem;
+}
+
+.lobby h3 {
+  font-size: 1rem;
+}
+
+.lobby form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lobby label {
+  font-weight: 700;
+}
+
+.lobby input {
+  /* 16px or more, or iOS Safari zooms the page on focus. */
+  font: inherit;
+  font-size: 1rem;
+  padding: 10px 14px;
+  border: 1px solid rgb(243 239 228 / 0.55);
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.2);
+  color: var(--text);
+}
+
+.lobby button {
+  min-height: 44px;
+  font: inherit;
+  font-weight: 700;
+  border: 1px solid rgb(243 239 228 / 0.55);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+}
+
+.lobby button.primary {
+  border-color: var(--tile-edge);
+  background: var(--tile);
+  color: var(--ink-black);
+}
+
+.lobby button:disabled {
+  opacity: 0.5;
+}
+
+.lobby button:focus-visible,
+.lobby input:focus-visible,
+.lobby a:focus-visible {
+  outline: 2px solid #ffd54a;
+  outline-offset: 2px;
+}
+
+.lobby a {
+  color: var(--text);
+}
+
+.lobby-link {
+  font-family: ui-monospace, monospace;
+  overflow-wrap: anywhere;
+}
+
+.link-lost {
+  color: var(--bad);
+}
+
+.play-friends {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  text-decoration: none;
+  white-space: nowrap;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgb(243 239 228 / 0.55);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}

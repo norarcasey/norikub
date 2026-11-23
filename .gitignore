@@ -15,3 +15,6 @@ apps/mac/build/
 # wrangler's local state: `wrangler dev`'s tables and its build output, and its secrets.
 .wrangler/
 .dev.vars*
+# Playwright's own output: the end-to-end run's traces and report.
+test-results/
+playwright-report/

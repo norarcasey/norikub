@@ -4,6 +4,9 @@ import type { ReactNode } from 'react';
 import { AccountPanel } from './account/AccountPanel.tsx';
 import type { Account } from './account/port.ts';
 import { env } from './env.ts';
+import { gameServer } from './online/gameServer.ts';
+import { newTableCode } from './online/seat.ts';
+import './online/friends.css';
 import { UpdateNotice } from './pwa/UpdateNotice.tsx';
 import { GameScreen } from './table/GameScreen.tsx';
 import { LineupPicker } from './table/LineupPicker.tsx';
@@ -24,15 +27,19 @@ export function App({
   seed,
   onSave = () => {},
   account,
+  friends = gameServer(import.meta.env),
 }: {
   initial?: Session;
   seed?: number;
   onSave?: (session: Session) => void;
   account?: Account | null;
+  /** The game host, or null for a build that cannot seat friends and so does not offer to. */
+  friends?: URL | null;
 }) {
   const [session, setSession] = useState<Session>(() => initial ?? newSession(seed ?? Date.now()));
   const [accountOpen, setAccountOpen] = useState(false);
   const [dealOpen, setDealOpen] = useState(false);
+  const [tableCode] = useState(() => newTableCode());
   const change = (next: Session) => {
     onSave(next);
     setSession(next);
@@ -57,6 +64,12 @@ export function App({
               <button type="button" className="account-open" onClick={() => setDealOpen(true)}>
                 New game
               </button>
+            )}
+            {friends !== null && (
+              // A new table is a new link; going there leaves this game saved as it is.
+              <a className="play-friends" href={`/t/${tableCode}`}>
+                Play friends
+              </a>
             )}
             {offered && (
               <button type="button" className="account-open" onClick={() => setAccountOpen(true)}>

@@ -4,6 +4,7 @@ import { newGame } from '@norikub/core/game';
 import type { Game } from '@norikub/core/game';
 import type { Tile } from '@norikub/core/tiles';
 import { drawInstead, endTurn, move, startTurn, takeBack } from '@norikub/core/turn';
+import type { Refusal } from '@norikub/core/table';
 import type { Move, MoveRefusal, Turn, TurnFault } from '@norikub/core/turn';
 
 import { toMove } from './drag.ts';
@@ -45,14 +46,15 @@ export function botNames(lineup: Lineup): string[] {
 
 /**
  * What the person is told after an action. Every one of these carries what the engine said,
- * not a judgement of the screen's own (invariant 1): a refusal, a fault, a draw or a bot's
- * turn.
+ * not a judgement of the screen's own (invariant 1): a refusal, a fault, a draw, another
+ * player's turn, or what a friends' table's host refused that is neither a move nor a fault.
  */
 export type Note =
   | { readonly kind: 'refused'; readonly refusal: MoveRefusal }
   | { readonly kind: 'fault'; readonly fault: TurnFault }
   | { readonly kind: 'drew'; readonly tile: Tile | null }
-  | { readonly kind: 'bot'; readonly name: string; readonly played: number };
+  | { readonly kind: 'played'; readonly name: string; readonly played: number }
+  | { readonly kind: 'host'; readonly refusal: Refusal };
 
 /**
  * The screen's whole state: the game, the person's turn in progress over it (none once the
@@ -140,7 +142,7 @@ function playBots(
     const after = next.players[seat]?.rack.length ?? 0;
     // A bot that draws ends with one tile more, and has played none.
     const played = Math.max(0, before - after);
-    notes.push({ kind: 'bot', name: current.players[seat]?.name ?? '', played });
+    notes.push({ kind: 'played', name: current.players[seat]?.name ?? '', played });
     current = next;
   }
   return { game: current, notes, frames, pile };
@@ -204,28 +206,68 @@ export function moveTiles(
   tileIds: readonly string[],
   target: DropTarget,
 ): Session {
+  if (session.turn === null) return session;
+  const moved = moveGroup(session, tileIds, target, {
+    table: (s) => s.turn?.table ?? [],
+    place: (s, m, spot) => {
+      const next = moveTile(s, m, spot);
+      const refused = next.notes.find((note) => note.kind === 'refused');
+      return refused === undefined ? { ok: true, state: next } : { ok: false, note: refused };
+    },
+  });
+  return moved.ok ? moved.state : { ...session, notes: [moved.note] };
+}
+
+/** One tile placed by `moveGroup`: the state after it, or why it was refused. */
+export type Placed<S> =
+  { readonly ok: true; readonly state: S } | { readonly ok: false; readonly note: Note };
+
+/**
+ * The moves of tapped tiles sent somewhere together, over any state a tile can be placed on:
+ * the bot game's session, or a friends' table's view (`online/friends.ts`). Written once, so
+ * the two cannot disagree about where the second tile of a group goes. All or none: `moves`
+ * is what was made, in order, for a friends' table to send on.
+ */
+export function moveGroup<S>(
+  state: S,
+  tileIds: readonly string[],
+  target: DropTarget,
+  ops: {
+    readonly table: (state: S) => readonly (readonly Tile[])[];
+    readonly place: (state: S, m: Move, spot?: RackSpot) => Placed<S>;
+  },
+):
+  | { readonly ok: true; readonly state: S; readonly moves: readonly Move[] }
+  | {
+      readonly ok: false;
+      readonly note: Note;
+    } {
   const [first, ...rest] = tileIds;
-  if (first === undefined || session.turn === null) return session;
+  if (first === undefined) return { ok: true, state, moves: [] };
   if (rest.length === 0) {
-    return moveTile(session, toMove(first, target), target.kind === 'rack' ? target : undefined);
+    const m = toMove(first, target);
+    const placed = ops.place(state, m, target.kind === 'rack' ? target : undefined);
+    return placed.ok ? { ...placed, moves: [m] } : placed;
   }
-  let next = session;
+  let next = state;
+  const moves: Move[] = [];
   for (let i = 0; i < tileIds.length; i++) {
-    const step = groupStep(next, tileIds, i, target);
-    if (step === null) return session;
-    next = moveTile(
+    const step = groupStep(ops.table(next), tileIds, i, target);
+    if (step === null) return { ok: true, state, moves: [] };
+    const placed = ops.place(
       next,
       step,
       target.kind === 'rack' ? { row: target.row, col: target.col + i } : undefined,
     );
-    const refused = next.notes.find((note) => note.kind === 'refused');
-    if (refused !== undefined) return { ...session, notes: [refused] };
+    if (!placed.ok) return placed;
+    next = placed.state;
+    moves.push(step);
   }
-  return next;
+  return { ok: true, state: next, moves };
 }
 
 function groupStep(
-  session: Session,
+  table: readonly (readonly Tile[])[],
   tileIds: readonly string[],
   i: number,
   target: DropTarget,
@@ -239,8 +281,8 @@ function groupStep(
       : { kind: 'to-set', tileId, set: target.set };
   }
   const anchor = tileIds[0];
-  const set = session.turn?.table.findIndex((tiles) => tiles.some((tile) => tile.id === anchor));
-  if (set === undefined || set === -1) return null;
+  const set = table.findIndex((tiles) => tiles.some((tile) => tile.id === anchor));
+  if (set === -1) return null;
   return { kind: 'to-set', tileId, set };
 }
 

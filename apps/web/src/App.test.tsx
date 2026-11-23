@@ -111,3 +111,16 @@ describe('the account', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
+
+describe('playing friends', () => {
+  it('offers a new table at its own link when the build knows a game host', () => {
+    render(<App seed={7} account={null} friends={new URL('http://localhost:8787')} />);
+    const link = screen.getByRole('link', { name: 'Play friends' });
+    expect(link.getAttribute('href')).toMatch(/^\/t\/[a-z0-9]{12}$/);
+  });
+
+  it('offers nothing in a build with no game host', () => {
+    render(<App seed={7} account={null} friends={null} />);
+    expect(screen.queryByRole('link', { name: 'Play friends' })).toBeNull();
+  });
+});

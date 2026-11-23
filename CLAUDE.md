@@ -96,6 +96,11 @@ scripts/db/       `db:env` only: points apps/web at CruciNora's local stack. Nor
 apps/web/src/supabase/
                   the client: auth-js and postgrest-js, pointed at the norikub schema.
                   docs/supabase.md has the one-time setup only a person can do
+apps/web/src/online/
+                  a friends' table at /t/<code>: sitting down, the seat token kept under
+                  the code, and the host's views turned into the table screen's Board
+e2e/              Playwright: three browsers play a friends' table through `wrangler dev`.
+                  `pnpm e2e`, in `verify` and never in CI
 ```
 
 A function imports the core by relative path, never by package name; a package it uses at

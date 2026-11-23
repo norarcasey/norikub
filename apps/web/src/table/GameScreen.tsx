@@ -2,11 +2,12 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode, PointerEvent as ReactPointerEvent } from 'react';
 
 import { arrangeSet, judgeSet, splitFor } from '@norikub/core/sets';
-import type { Game, Status } from '@norikub/core/game';
-import { rackPenalty } from '@norikub/core/tiles';
+import type { Status } from '@norikub/core/game';
 import type { Tile } from '@norikub/core/tiles';
 
 import { ANIMALS, NoraJoker } from './art.tsx';
+import { boardOf, sessionActions } from './board.ts';
+import type { Actions, Board } from './board.ts';
 import { dropAttribute, ghostTransform, toMove, useDrag } from './drag.ts';
 import type { Drag, DropTarget } from './drag.ts';
 import {
@@ -19,10 +20,9 @@ import {
   tileName,
   winnerText,
 } from './messages.ts';
-import { fitPile, pileSpot } from './pile.ts';
+import { pileSpot } from './pile.ts';
 import { LineupPicker } from './LineupPicker.tsx';
 import { FLIGHT_MS, usePlayback } from './playback.ts';
-import { PERSON, drawTile, finishTurn, moveTile, moveTiles, probe, undoTurn } from './session.ts';
 import type { Lineup, Session } from './session.ts';
 import './table.css';
 
@@ -157,31 +157,34 @@ type Over = Extract<Status, { kind: 'over' }>;
  * The end of the game: who won, why it ended, and what each rack cost. Every number is the
  * engine's (`finish`); the points left are shown beside the score so a reader can see where
  * the score came from. Highest score first, the winner always at the top.
+ *
+ * At a friends' table another player's rack never reaches this page, so their points left are
+ * worked out from their score where the score says it (a loser's is minus their rack) and
+ * shown as a dash where it cannot (KUB-34).
  */
 function ScoreScreen({
-  game,
+  board,
   over,
-  lineup,
-  onNewGame,
+  next,
 }: {
-  game: Game;
+  board: Board;
   over: Over;
-  lineup: Lineup;
-  onNewGame: (lineup: Lineup) => void;
+  /** What comes after: a new deal against bots picked for it, or a friends' table's deal. */
+  next: ReactNode;
 }) {
-  const rows = game.players
-    .map((player, seat) => ({
+  const rows = board.names
+    .map((name, seat) => ({
       seat,
-      name: seat === PERSON ? 'You' : player.name,
-      tiles: player.rack.length,
-      left: rackPenalty(player.rack),
+      name: seat === board.you ? 'You' : name,
+      tiles: board.counts[seat] ?? 0,
+      left: board.left[seat] ?? null,
       score: over.scores[seat] ?? 0,
     }))
     .sort((a, b) => (a.seat === over.winner ? -1 : b.seat === over.winner ? 1 : b.score - a.score));
   return (
     <section className="scores" aria-label="Scores">
-      <h2>{winnerText(game, over)}</h2>
-      <p>{overText(over)}</p>
+      <h2>{winnerText(board.names, over, board.you)}</h2>
+      <p>{overText(over, board.you)}</p>
       <table>
         <thead>
           <tr>
@@ -196,17 +199,18 @@ function ScoreScreen({
             <tr key={row.seat} data-winner={row.seat === over.winner || undefined}>
               <th scope="row">{row.name}</th>
               <td>{row.tiles}</td>
-              <td>{row.left}</td>
+              <td>{row.left ?? '–'}</td>
               <td>{row.score > 0 ? `+${row.score}` : row.score}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <LineupPicker initial={lineup} action="New game" onDeal={onNewGame} />
+      {next}
     </section>
   );
 }
 
+/** The game against the bots: its session, drawn by the table screen. */
 export function GameScreen({
   session,
   onChange,
@@ -220,37 +224,64 @@ export function GameScreen({
   /** Shown at the end of the game bar, after the pool count: the Account button (KUB-29). */
   barEnd?: ReactNode;
 }) {
-  const { game, turn, notes, rows } = session;
+  return (
+    <TableScreen
+      board={boardOf(session)}
+      actions={sessionActions(session, onChange)}
+      barEnd={barEnd}
+      afterScores={<LineupPicker initial={session.lineup} action="New game" onDeal={onNewGame} />}
+    />
+  );
+}
+
+/**
+ * The table, the pool and the rack, for any game one seat can see: against the bots or at a
+ * friends' table. It draws a `Board` and asks `Actions`; it never holds a game of its own.
+ */
+export function TableScreen({
+  board,
+  actions,
+  barEnd,
+  afterScores,
+}: {
+  board: Board;
+  actions: Actions;
+  barEnd?: ReactNode;
+  /** Under the scores once the game is over: what starts the next one, for whoever may. */
+  afterScores?: ReactNode;
+}) {
+  const { notes, rows, began } = board;
+  const mine = began !== null;
   // The tiles tapped, in the order tapped: one to move like a drop, or several to send
   // somewhere together (KUB-2).
   const [selected, setSelected] = useState<readonly string[]>([]);
   // While a bot's turn plays back, the screen shows the frame and takes no moves: the game
   // underneath is already at the person's turn, and a move made now would be made on a table
   // they cannot see.
-  const playback = usePlayback(session.replay);
+  const playback = usePlayback(board.replay);
   const watching = playback.frame;
 
   const place = useCallback(
     (tileId: string, target: DropTarget) => {
       setSelected([]);
       const spot = target.kind === 'rack' ? { row: target.row, col: target.col } : undefined;
-      onChange(moveTile(session, toMove(tileId, target), spot));
+      actions.place(toMove(tileId, target), spot);
     },
-    [session, onChange],
+    [actions],
   );
 
   const drag = useDrag({ onDrop: place });
-  const table = watching?.table ?? turn?.table ?? game.table;
+  const table = watching?.table ?? board.table;
 
   const send = (target: DropTarget) => {
     setSelected([]);
-    onChange(moveTiles(session, selected, target));
+    actions.send(selected, target);
   };
   // A turn's buttons and a draw let the picked tiles go: they were picked for the table as it
   // was, and a take-back or a new turn has put them somewhere else.
-  const act = (next: Session) => {
+  const act = (action: () => void) => {
     setSelected([]);
-    onChange(next);
+    action();
   };
 
   const live: TileEvents = {
@@ -274,12 +305,13 @@ export function GameScreen({
       else setSelected([...selected, tileId]);
     },
   };
-  const events = watching === null ? live : INERT;
+  // At a friends' table the others watch the mover rework the table and cannot touch it.
+  const events = watching === null && mine ? live : INERT;
 
   // Tap tiles, then tap where they go: the same moves as a drag, for a keyboard or a hand
   // that would rather not drag, and the one way to play several tiles at once.
   const tapTarget = (target: DropTarget) => () => {
-    if (watching === null && selected.length > 0) send(target);
+    if (watching === null && mine && selected.length > 0) send(target);
   };
 
   // While a tile is in flight the engine is asked what it would say to letting go here, so a
@@ -287,7 +319,7 @@ export function GameScreen({
   const hovering = drag.drag?.target ?? null;
   const refusal =
     drag.drag !== null && hovering !== null
-      ? probe(session, toMove(drag.drag.tileId, hovering))
+      ? actions.probe(toMove(drag.drag.tileId, hovering))
       : null;
 
   const zoneState = (target: DropTarget) =>
@@ -299,13 +331,13 @@ export function GameScreen({
           : 'over'
       : undefined;
 
-  const startIds = new Set(turn?.start.table.flat().map((tile) => tile.id) ?? []);
+  const startIds = new Set(began?.flat().map((tile) => tile.id) ?? []);
   const invalid = new Set(
     notes.flatMap((note) =>
       note.kind === 'fault' && note.fault.kind === 'invalid-set' ? [note.fault.set] : [],
     ),
   );
-  const rack = turn?.rack ?? game.players[PERSON]?.rack ?? [];
+  const rack = board.rack;
   const byId = new Map(rack.map((tile) => [tile.id, tile]));
   const lifted = drag.drag?.tileId ?? null;
   // Held over a run it would split, the engine says where (`splitFor`), and the set shows the
@@ -326,7 +358,7 @@ export function GameScreen({
     selected: selected.includes(tile.id),
     fresh:
       watching === null
-        ? onTable && turn !== null && !startIds.has(tile.id)
+        ? onTable && mine && !startIds.has(tile.id)
         : (watching.step.kind === 'placed' && watching.step.tile.id === tile.id) ||
           (watching.step.kind === 'drew' && watching.step.face?.id === tile.id),
     // The person's drawn tile is already in the rack; it stays out of sight until its flight
@@ -334,23 +366,26 @@ export function GameScreen({
     arriving: watching?.step.kind === 'drawing' && watching.step.face?.id === tile.id,
     scrolls: onTable,
   });
-  const pile = watching?.pile ?? fitPile(session.pile, game.pool.length);
+  const pile = watching?.pile ?? board.pile;
   const poolCount = pile.length;
   const flyingFrom = watching?.step.kind === 'drawing' ? watching.step.pick : null;
+  const status = board.status;
 
-  const opponents = game.players.flatMap((player, seat) =>
-    seat === PERSON
+  const opponents = board.names.flatMap((name, seat) =>
+    seat === board.you
       ? []
       : [
           {
             seat,
-            name: player.name,
-            count: watching?.counts[seat] ?? player.rack.length,
-            playing: watching?.seat === seat,
+            name,
+            count: watching?.counts[seat] ?? board.counts[seat] ?? 0,
+            playing:
+              watching === null
+                ? status.kind === 'playing' && board.current === seat
+                : watching.seat === seat,
           },
         ],
   );
-  const status = game.status;
 
   return (
     <div className="game">
@@ -395,7 +430,7 @@ export function GameScreen({
             </div>
           );
         })}
-        {turn !== null && watching === null && (
+        {mine && watching === null && (
           <div
             className="set new-set"
             role="button"
@@ -424,7 +459,7 @@ export function GameScreen({
                 type="button"
                 className="face-down"
                 aria-label="Face-down tile"
-                aria-disabled={watching !== null || undefined}
+                aria-disabled={watching !== null || !mine || undefined}
                 data-pick={pick}
                 data-lifted={pick === flyingFrom || undefined}
                 style={{
@@ -433,7 +468,7 @@ export function GameScreen({
                   transform: `rotate(${angle}deg)`,
                 }}
                 onClick={() => {
-                  if (watching === null) act(drawTile(session, pick));
+                  if (watching === null && mine) act(() => actions.draw(pick));
                 }}
               />
             );
@@ -459,14 +494,19 @@ export function GameScreen({
       <div className="turn-bar">
         <p className="notes" role="status">
           {watching !== null
-            ? frameText(watching)
+            ? frameText(watching, board.you)
             : drag.drag !== null && refusal !== null
               ? refusalText(refusal)
               : split !== null && held !== undefined
                 ? splitText(held)
                 : drag.drag === null && selected.length > 1
                   ? pickedText(selected.length)
-                  : notes.map(noteText).join(' ')}
+                  : [
+                      ...notes.map(noteText),
+                      ...(!mine && status.kind === 'playing'
+                        ? [`${board.names[board.current] ?? 'Another player'} is playing.`]
+                        : []),
+                    ].join(' ')}
         </p>
 
         {watching !== null ? (
@@ -475,17 +515,17 @@ export function GameScreen({
               Skip
             </button>
           </div>
-        ) : status.kind === 'over' ? null : (
+        ) : !mine ? null : (
           <div className="actions">
-            <button type="button" onClick={() => act(undoTurn(session))}>
+            <button type="button" onClick={() => act(actions.takeBack)}>
               Take back
             </button>
-            {game.pool.length === 0 && (
-              <button type="button" onClick={() => act(drawTile(session))}>
+            {board.poolSize === 0 && (
+              <button type="button" onClick={() => act(() => actions.draw())}>
                 Pass
               </button>
             )}
-            <button type="button" className="primary" onClick={() => act(finishTurn(session))}>
+            <button type="button" className="primary" onClick={() => act(actions.endTurn)}>
               End turn
             </button>
           </div>
@@ -493,7 +533,7 @@ export function GameScreen({
       </div>
 
       {watching === null && status.kind === 'over' && (
-        <ScoreScreen game={game} over={status} lineup={session.lineup} onNewGame={onNewGame} />
+        <ScoreScreen board={board} over={status} next={afterScores} />
       )}
 
       <section className="rack" aria-label="Your rack">

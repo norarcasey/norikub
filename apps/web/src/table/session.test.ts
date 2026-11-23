@@ -95,8 +95,8 @@ describe('a session', () => {
     expect(next.turn?.rack.map((tile) => tile.id)).toEqual(['black-2-a']);
     // Neither bot can play from these racks, so each draws: played 0, never -1.
     expect(next.notes).toEqual([
-      { kind: 'bot', name: 'P1', played: 0 },
-      { kind: 'bot', name: 'P2', played: 0 },
+      { kind: 'played', name: 'P1', played: 0 },
+      { kind: 'played', name: 'P2', played: 0 },
     ]);
   });
 
