@@ -1,5 +1,6 @@
 import { levelSchema } from '@norikub/core/bot';
 import { gameSchema } from '@norikub/core/game';
+import { SINGLE, matchFits, matchSchema, newMatch } from '@norikub/core/match';
 import { parse } from '@norikub/core/parse';
 import { tileSchema } from '@norikub/core/tiles';
 import { resumeTurn } from '@norikub/core/turn';
@@ -43,23 +44,30 @@ const savedFields = {
   pile: z.array(z.number().int().min(0)).readonly(),
 };
 
+const lineupSchema = z.array(levelSchema).min(1).max(3).readonly();
+
 /**
  * Version 2 adds the lineup, the level of each bot (KUB-41). A version 1 game was played
  * against the one bot there was, which is the medium one, and resumes against it.
+ *
+ * Version 3 adds the match (KUB-42). A game saved before it was one game on its own, and
+ * resumes as one.
  */
 export const savedSchema = z.union([
   z
-    .object({ version: z.literal(2), ...savedFields, lineup: z.array(levelSchema).readonly() })
+    .object({ version: z.literal(3), ...savedFields, lineup: lineupSchema, match: matchSchema })
     .readonly(),
+  z.object({ version: z.literal(2), ...savedFields, lineup: lineupSchema }).readonly(),
   z.object({ version: z.literal(1), ...savedFields }).readonly(),
 ]);
 export type Saved = z.infer<typeof savedSchema>;
 
-export function toSaved(session: Session): Saved {
+export function toSaved(session: Session): Extract<Saved, { version: 3 }> {
   const { turn } = session;
   return {
-    version: 2,
+    version: 3,
     lineup: session.lineup,
+    match: session.match,
     game: session.game,
     turn: turn === null ? null : { rack: turn.rack, table: turn.table },
     rows: session.rows,
@@ -78,12 +86,18 @@ export function fromSaved(input: unknown): Session | null {
   if (!parsed.ok) return null;
   const saved = parsed.value;
   const { game } = saved;
-  const lineup = saved.version === 2 ? saved.lineup : FIRST_LINEUP;
+  const lineup = saved.version === 1 ? FIRST_LINEUP : saved.lineup;
+  const match = saved.version === 3 ? saved.match : newMatch(SINGLE);
+  // A lineup or a match for another number of seats is not this game's: one of them was
+  // written wrong, and resuming would score a game nobody played.
+  const seats = game.players.length;
+  if (lineup.length !== seats - 1 || !matchFits(match, seats)) return null;
+  const sitting = { lineup, match };
   const turn =
     saved.turn === null || game.current !== PERSON
       ? null
       : resumeTurn(game, saved.turn.rack, saved.turn.table);
-  if (turn === null) return fromGame(game, [], saved.startRows, [], saved.pile, lineup);
+  if (turn === null) return fromGame(game, [], saved.startRows, [], saved.pile, sitting);
   return {
     game,
     turn,
@@ -92,6 +106,6 @@ export function fromSaved(input: unknown): Session | null {
     notes: [],
     replay: [],
     pile: fitPile(saved.pile, game.pool.length),
-    lineup,
+    ...sitting,
   };
 }

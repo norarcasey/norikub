@@ -2,6 +2,8 @@ import { botFor, takeBotTurn } from '@norikub/core/bot';
 import type { Level } from '@norikub/core/bot';
 import { newGame } from '@norikub/core/game';
 import type { Game } from '@norikub/core/game';
+import { SINGLE, newMatch, nextGameOf, standing } from '@norikub/core/match';
+import type { Match, MatchFormat } from '@norikub/core/match';
 import type { Tile } from '@norikub/core/tiles';
 import { drawInstead, endTurn, move, startTurn, takeBack } from '@norikub/core/turn';
 import type { Refusal } from '@norikub/core/table';
@@ -28,6 +30,19 @@ export type Lineup = readonly Level[];
 
 /** The bots a game starts with when none were picked: the one bot there was before KUB-41. */
 export const FIRST_LINEUP: Lineup = ['medium', 'medium'];
+
+/**
+ * What is picked before a sitting (KUB-42): the bots, one to three of them, and how long it
+ * lasts. Play now deals the last one picked, or this one on a first visit.
+ */
+export type Setup = { readonly lineup: Lineup; readonly format: MatchFormat };
+
+export const FIRST_SETUP: Setup = { lineup: FIRST_LINEUP, format: SINGLE };
+
+/** Who plays the other seats, and the match the game is part of: carried from deal to deal. */
+type Sitting = Pick<Session, 'lineup' | 'match'>;
+
+const FIRST_SITTING: Sitting = { lineup: FIRST_LINEUP, match: newMatch(SINGLE) };
 
 const LEVEL_NAMES: Readonly<Record<Level, string>> = {
   easy: 'Easy bot',
@@ -78,21 +93,52 @@ export type Session = {
   /** The face-down tiles' spots, parallel to `game.pool` (KUB-25). */
   readonly pile: Pile;
   readonly lineup: Lineup;
+  /** The games finished before this one, and how many more there are to be (KUB-42). */
+  readonly match: Match;
 };
 
 /** Where on the rack a tile is let go: a row, and the place along it. */
 export type RackSpot = { readonly row: number; readonly col: number };
 
-export function newSession(seed: number, lineup: Lineup = FIRST_LINEUP): Session {
-  const game = newGame({ names: ['You', ...botNames(lineup)], seed });
-  return fromGame(game, [], undefined, [], undefined, lineup);
+export function newSession(seed: number, setup: Setup = FIRST_SETUP): Session {
+  return deal(seed, { lineup: setup.lineup, match: newMatch(setup.format) });
+}
+
+export function setupOf(session: Session): Setup {
+  return { lineup: session.lineup, format: session.match.format };
+}
+
+/**
+ * The next game of the match, against the same bots, with the finished game's scores moved
+ * into the match. Null while this game is being played or when the match is over: then the
+ * screen offers a new sitting instead.
+ */
+export function nextGame(session: Session, seed: number): Session | null {
+  const { game } = session;
+  const match = nextGameOf(session.match, game.status, game.players.length);
+  return match === null ? null : deal(seed, { lineup: session.lineup, match });
+}
+
+/**
+ * True while there is something to go back to: a game being played, or a finished one with
+ * the match's next game still to deal. A reload resumes these on the table (invariant 3), and
+ * opens on the landing otherwise (KUB-42).
+ */
+export function inProgress(session: Session): boolean {
+  const { game, match } = session;
+  return !standing(match, game.status, game.players.length).over;
+}
+
+function deal(seed: number, sitting: Sitting): Session {
+  const game = newGame({ names: ['You', ...botNames(sitting.lineup)], seed });
+  return fromGame(game, [], undefined, [], undefined, sitting);
 }
 
 /**
  * A session at the person's turn, after any bots due before it have played. With no rows
  * given, the rack is laid out as a fresh deal. `lead` is played back before the bots' turns:
  * the person's own draw. `pile` is the pile for `game.pool`; with none, the pile is dealt.
- * `lineup` is who plays the other seats.
+ * `sitting` is who plays the other seats and the match the game is part of.
  */
 export function fromGame(
   game: Game,
@@ -100,8 +146,9 @@ export function fromGame(
   rows?: RackRows,
   lead: readonly Frame[] = [],
   pile?: Pile,
-  lineup: Lineup = FIRST_LINEUP,
+  sitting: Sitting = FIRST_SITTING,
 ): Session {
+  const { lineup, match } = sitting;
   const played = playBots(game, fitPile(pile, game.pool.length), lineup);
   const turn = played.game.status.kind === 'playing' ? startTurn(played.game) : null;
   const rack = played.game.players[PERSON]?.rack ?? [];
@@ -115,6 +162,7 @@ export function fromGame(
     replay: [...lead, ...played.frames],
     pile: played.pile,
     lineup,
+    match,
   };
 }
 
@@ -292,7 +340,7 @@ export function finishTurn(session: Session): Session {
   if (!result.ok) {
     return { ...session, notes: result.faults.map((fault): Note => ({ kind: 'fault', fault })) };
   }
-  return fromGame(result.game, [], session.rows, [], session.pile, session.lineup);
+  return fromGame(result.game, [], session.rows, [], session.pile, session);
 }
 
 export function undoTurn(session: Session): Session {
@@ -327,5 +375,5 @@ export function drawTile(session: Session, pick?: number): Session {
       : drawFrames(session.turn.start, result.game, pick, result.drawn, pile);
   const after = pick === undefined || result.drawn === null ? pile : takeFromPile(pile, pick);
   const notes: Note[] = [{ kind: 'drew', tile: result.drawn }];
-  return fromGame(result.game, notes, back, lead, after, session.lineup);
+  return fromGame(result.game, notes, back, lead, after, session);
 }

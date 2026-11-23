@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { moveTile, newSession } from './session.ts';
+import { SINGLE } from '../../../../packages/core/src/match.ts';
+import { moveTile, newSession, nextGame } from './session.ts';
 import { fromSaved, toSaved } from './saved.ts';
 
 // Through JSON, as the store keeps it: a field that survives only as an object reference
@@ -47,7 +48,7 @@ describe('a saved session', () => {
   });
 
   it('keeps the bots picked for the game (KUB-41)', () => {
-    const picked = newSession(7, ['easy', 'hard']);
+    const picked = newSession(7, { lineup: ['easy', 'hard'], format: SINGLE });
     expect(fromSaved(reloaded(toSaved(picked)))?.lineup).toEqual(['easy', 'hard']);
   });
 
@@ -56,6 +57,30 @@ describe('a saved session', () => {
     const back = fromSaved(reloaded({ version: 1, game, turn, rows, startRows, pile }));
     expect(back?.lineup).toEqual(['medium', 'medium']);
     expect(back?.turn).toEqual(midTurn.turn);
+  });
+
+  it('keeps the match, its games played and its format (KUB-42)', () => {
+    const three = newSession(7, { lineup: ['easy', 'hard'], format: { kind: 'games', games: 3 } });
+    const second = nextGame(
+      { ...three, game: { ...three.game, status: overStatus() }, turn: null },
+      8,
+    );
+    if (second === null) throw new Error('a match of three ended after one');
+    const back = fromSaved(reloaded(toSaved(second)));
+    expect(back?.match).toEqual({ format: { kind: 'games', games: 3 }, played: [[-10, 10, 0]] });
+  });
+
+  it('resumes a game saved before matches as one game on its own', () => {
+    const { game, turn, rows, startRows, pile, lineup } = toSaved(midTurn);
+    const back = fromSaved(reloaded({ version: 2, game, turn, rows, startRows, pile, lineup }));
+    expect(back?.match).toEqual({ format: { kind: 'single' }, played: [] });
+  });
+
+  it('is refused when its lineup or its match is for another number of seats', () => {
+    const saved = toSaved(midTurn);
+    expect(fromSaved(reloaded({ ...saved, lineup: ['easy'] }))).toBeNull();
+    const match = { format: SINGLE, played: [[10, -10]] };
+    expect(fromSaved(reloaded({ ...saved, match }))).toBeNull();
   });
 
   it('is refused when it is not a game', () => {

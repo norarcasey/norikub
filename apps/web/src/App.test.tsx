@@ -56,6 +56,85 @@ describe('picking the bots (KUB-41)', () => {
   });
 });
 
+describe('the landing (KUB-42)', () => {
+  const finished = (s: Session, scores: readonly number[]): Session => ({
+    ...s,
+    game: { ...s.game, status: { kind: 'over', reason: 'rack-emptied', winner: 0, scores } },
+    turn: null,
+  });
+
+  it('opens when nothing is saved, and Play now deals the first setup, saved first', () => {
+    const onSave = vi.fn();
+    render(<App onSave={onSave} account={null} friends={null} />);
+    const start = screen.getByRole('region', { name: 'Start' });
+    expect(start.textContent).toContain('Against Medium bot A and Medium bot B, one game.');
+    fireEvent.click(screen.getByRole('button', { name: 'Play now' }));
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ lineup: ['medium', 'medium'] });
+    expect(screen.getByRole('button', { name: 'End turn' })).toBeTruthy();
+  });
+
+  it('sets up three bots for a few games, and the bar counts the games', () => {
+    const onSave = vi.fn();
+    render(<App onSave={onSave} account={null} friends={null} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Set up a game' }));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Bots' })).getByRole('radio', { name: '3' }),
+    );
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Third bot' })).getByRole('radio', {
+        name: 'Easy',
+      }),
+    );
+    fireEvent.click(screen.getByRole('radio', { name: 'A few games' }));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Games' })).getByRole('radio', { name: '5' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Deal' }));
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({
+      lineup: ['medium', 'medium', 'easy'],
+      match: { format: { kind: 'games', games: 5 }, played: [] },
+    });
+    expect(screen.getByText('Game 1 of 5')).toBeTruthy();
+    expect(screen.getByRole('list', { name: 'Opponents' }).children).toHaveLength(3);
+  });
+
+  it('goes back from the setup without dealing', () => {
+    const onSave = vi.fn();
+    render(<App onSave={onSave} account={null} friends={null} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Set up a game' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByRole('button', { name: 'Play now' })).toBeTruthy();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('opens on a finished game, offering what it was played as', () => {
+    const last = newSession(7, { lineup: ['hard'], format: { kind: 'points', target: 200 } });
+    render(<App initial={finished(last, [200, -200])} account={null} friends={null} />);
+    expect(screen.getByRole('region', { name: 'Start' }).textContent).toContain(
+      'Against Hard bot, first to 200 points.',
+    );
+  });
+
+  it('resumes a match between games on the table, and deals its next game', () => {
+    const onSave = vi.fn();
+    const first = newSession(7, { lineup: ['hard'], format: { kind: 'games', games: 3 } });
+    render(
+      <App initial={finished(first, [30, -30])} onSave={onSave} account={null} friends={null} />,
+    );
+    expect(screen.queryByRole('region', { name: 'Start' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Next game' }));
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ match: { played: [[30, -30]] } });
+    expect(screen.getByText('Game 2 of 3')).toBeTruthy();
+  });
+
+  it('offers a friends’ table when the build knows a game host', () => {
+    render(<App account={null} friends={new URL('http://localhost:8787')} />);
+    const link = screen.getByRole('link', { name: 'Play friends' });
+    expect(link.getAttribute('href')).toMatch(/^\/t\/[a-z0-9]{12}$/);
+  });
+});
+
 describe('the account', () => {
   const signedOut: Account = {
     current: () => Promise.resolve(null),

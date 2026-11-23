@@ -7,20 +7,25 @@ import { env } from './env.ts';
 import { gameServer } from './online/gameServer.ts';
 import { newTableCode } from './online/seat.ts';
 import './online/friends.css';
+import { standing } from '@norikub/core/match';
+
+import { Landing } from './Landing.tsx';
 import { UpdateNotice } from './pwa/UpdateNotice.tsx';
 import { GameScreen } from './table/GameScreen.tsx';
-import { LineupPicker } from './table/LineupPicker.tsx';
-import { newSession } from './table/session.ts';
-import type { Lineup, Session } from './table/session.ts';
+import { GameSetup } from './table/GameSetup.tsx';
+import { matchLine } from './table/messages.ts';
+import { FIRST_SETUP, inProgress, newSession, nextGame, setupOf } from './table/session.ts';
+import type { Session, Setup } from './table/session.ts';
 
 // auth-js arrives in this chunk, fetched only when the panel is first opened (KUB-29).
 const LiveAccountPanel = lazy(() => import('./account/LiveAccountPanel.tsx'));
 
 /**
- * `initial` is the game to show first: the one resumed from the device, or a new deal. A test
- * passes `seed` instead to play a known deal. `onSave` is handed every session before it is
- * shown (invariant 3), so the state on the device is never behind the screen. `account` left
- * out is the real one, when the build has the Supabase values; null offers no sign-in.
+ * `initial` is the game saved on the device. It is shown first while it is in progress; a
+ * finished one, or none, opens on the landing, which offers its setup again (KUB-42). A test
+ * passes `seed` instead to start at a known deal. `onSave` is handed every session before it
+ * is shown (invariant 3), so the state on the device is never behind the screen. `account`
+ * left out is the real one, when the build has the Supabase values; null offers no sign-in.
  */
 export function App({
   initial,
@@ -29,14 +34,27 @@ export function App({
   account,
   friends = gameServer(import.meta.env),
 }: {
-  initial?: Session;
+  initial?: Session | undefined;
   seed?: number;
   onSave?: (session: Session) => void;
   account?: Account | null;
   /** The game host, or null for a build that cannot seat friends and so does not offer to. */
   friends?: URL | null;
 }) {
-  const [session, setSession] = useState<Session>(() => initial ?? newSession(seed ?? Date.now()));
+  // Null is the landing: nothing in progress to show.
+  const [session, setSession] = useState<Session | null>(() =>
+    initial !== undefined
+      ? inProgress(initial)
+        ? initial
+        : null
+      : seed === undefined
+        ? null
+        : newSession(seed),
+  );
+  // What Play now deals: the setup of the game saved, then of each one dealt here.
+  const [last, setLast] = useState<Setup>(() =>
+    initial === undefined ? FIRST_SETUP : setupOf(initial),
+  );
   const [accountOpen, setAccountOpen] = useState(false);
   const [dealOpen, setDealOpen] = useState(false);
   const [tableCode] = useState(() => newTableCode());
@@ -44,12 +62,29 @@ export function App({
     onSave(next);
     setSession(next);
   };
-  const deal = (lineup: Lineup) => {
+  const deal = (setup: Setup) => {
     setDealOpen(false);
-    change(newSession(Date.now(), lineup));
+    setLast(setup);
+    change(newSession(Date.now(), setup));
   };
+  const next = () => {
+    const dealt = session === null ? null : nextGame(session, Date.now());
+    if (dealt !== null) change(dealt);
+  };
+  const friendsLink = friends === null ? null : `/t/${tableCode}`;
   // A build without the values does not offer sign-in at all, and plays as before.
   const offered = account === undefined ? env !== null : account !== null;
+  if (session === null) {
+    return (
+      <main>
+        <UpdateNotice />
+        <h1 className="visually-hidden">Norikub</h1>
+        <Landing last={last} onDeal={deal} friendsLink={friendsLink} />
+      </main>
+    );
+  }
+  const { game, match } = session;
+  const line = matchLine(match.format, standing(match, game.status, game.players.length));
   return (
     <main>
       <UpdateNotice />
@@ -58,16 +93,18 @@ export function App({
         session={session}
         onChange={change}
         onNewGame={deal}
+        onNextGame={next}
         barEnd={
           <>
-            {session.game.status.kind === 'playing' && (
+            {line !== null && <span className="match-line">{line}</span>}
+            {game.status.kind === 'playing' && (
               <button type="button" className="account-open" onClick={() => setDealOpen(true)}>
                 New game
               </button>
             )}
-            {friends !== null && (
+            {friendsLink !== null && (
               // A new table is a new link; going there leaves this game saved as it is.
-              <a className="play-friends" href={`/t/${tableCode}`}>
+              <a className="play-friends" href={friendsLink}>
                 Play friends
               </a>
             )}
@@ -83,8 +120,12 @@ export function App({
         <Dialog label="New game" onClose={() => setDealOpen(false)}>
           <section className="account">
             <h2>New game</h2>
-            <p>This game is given up, and a new one dealt against the bots picked here.</p>
-            <LineupPicker initial={session.lineup} action="Deal a new game" onDeal={deal} />
+            <p>
+              {match.format.kind === 'single'
+                ? 'This game is given up, and a new one dealt as set up here.'
+                : 'This match is given up, and a new one dealt as set up here.'}
+            </p>
+            <GameSetup initial={setupOf(session)} action="Deal a new game" onDeal={deal} />
           </section>
         </Dialog>
       )}

@@ -105,6 +105,44 @@
   color: var(--bad);
 }
 
+/*
+ * Where the app opens with no game in progress (KUB-42), in the lobby's panel: Play now
+ * first and filled, the other two drawn as the lobby's plain buttons, the friends' link too.
+ */
+.landing {
+  align-items: stretch;
+  text-align: center;
+}
+
+.landing .lineup {
+  align-self: center;
+}
+
+.landing .lineup button.primary {
+  width: 100%;
+}
+
+.landing-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  border: 1px solid rgb(243 239 228 / 0.55);
+  border-radius: 999px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.lobby a.landing-choice {
+  color: var(--text);
+}
+
+.landing-back {
+  align-self: center;
+  padding: 0 22px;
+}
+
 .play-friends {
   display: inline-flex;
   align-items: center;

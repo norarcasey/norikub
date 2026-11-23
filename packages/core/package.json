@@ -6,6 +6,7 @@
   "exports": {
     "./bot": "./src/bot.ts",
     "./game": "./src/game.ts",
+    "./match": "./src/match.ts",
     "./parse": "./src/parse.ts",
     "./protocol": "./src/protocol.ts",
     "./random": "./src/random.ts",

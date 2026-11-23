@@ -1,10 +1,12 @@
 import type { Status } from '@norikub/core/game';
+import type { MatchFormat, Standing } from '@norikub/core/match';
 import type { Refusal, TableRefusal } from '@norikub/core/table';
 import type { Tile } from '@norikub/core/tiles';
 import type { MoveRefusal, TurnFault } from '@norikub/core/turn';
 
 import type { Frame } from './replay.ts';
-import type { Note } from './session.ts';
+import { botNames } from './session.ts';
+import type { Note, Setup } from './session.ts';
 
 export function tileName(tile: Tile): string {
   return tile.kind === 'joker' ? 'joker' : `${tile.colour} ${tile.value}`;
@@ -136,4 +138,63 @@ export function overText(over: Over, you: number): string {
     case 'pool-exhausted':
       return 'The pool ran out and nobody could play, so the lowest rack wins.';
   }
+}
+
+/** How long a sitting lasts, as the setup and Play now say it (KUB-42). */
+export function formatText(format: MatchFormat): string {
+  switch (format.kind) {
+    case 'single':
+      return 'one game';
+    case 'games':
+      return `${format.games} games`;
+    case 'points':
+      return `first to ${format.target} points`;
+  }
+}
+
+/** What Play now will deal: "Against Medium bot A and Medium bot B, one game." */
+export function setupText(setup: Setup): string {
+  return `Against ${listed(botNames(setup.lineup))}, ${formatText(setup.format)}.`;
+}
+
+/** The game bar's word on the match, or null for a game on its own. */
+export function matchLine(format: MatchFormat, standing: Standing): string | null {
+  switch (format.kind) {
+    case 'single':
+      return null;
+    case 'games':
+      return `Game ${standing.game} of ${format.games}`;
+    case 'points':
+      return `Game ${standing.game}, to ${format.target}`;
+  }
+}
+
+/** Under a finished game's scores: where the match stands, or who took it. */
+export function standingText(
+  format: MatchFormat,
+  standing: Standing,
+  names: readonly string[],
+  you: number,
+): string {
+  if (standing.over) {
+    const [only, ...others] = standing.leaders;
+    if (only !== undefined && others.length === 0) {
+      return only === you ? 'You won the match.' : `${names[only] ?? ''} won the match.`;
+    }
+    const who = standing.leaders.map((seat) => (seat === you ? 'you' : (names[seat] ?? '')));
+    return `The match is shared by ${listed(who)}.`;
+  }
+  switch (format.kind) {
+    case 'single':
+    case 'games':
+      return `After game ${standing.game} of ${format.kind === 'games' ? format.games : 1}.`;
+    case 'points':
+      return `After game ${standing.game}. The first to ${format.target} points takes the match.`;
+  }
+}
+
+/** "A", "A and B", "A, B and C". */
+function listed(names: readonly string[]): string {
+  const last = names.at(-1) ?? '';
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${last}` : last;
 }

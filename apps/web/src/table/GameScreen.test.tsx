@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { layout } from '../../../../packages/core/src/fixtures.test-helpers.ts';
 import type { Game } from '../../../../packages/core/src/game.ts';
+import { SINGLE, newMatch } from '../../../../packages/core/src/match.ts';
+import type { Match } from '../../../../packages/core/src/match.ts';
 import { GameScreen } from './GameScreen.tsx';
-import { fromGame } from './session.ts';
-import type { Session } from './session.ts';
+import { FIRST_LINEUP, fromGame } from './session.ts';
+import type { Session, Setup } from './session.ts';
 
 function Harness() {
   const [session, setSession] = useState<Session>(() =>
@@ -22,7 +24,7 @@ function Harness() {
       [],
     ),
   );
-  return <GameScreen session={session} onChange={setSession} onNewGame={noop} />;
+  return <GameScreen session={session} onChange={setSession} onNewGame={noop} onNextGame={noop} />;
 }
 
 function RunHarness() {
@@ -39,7 +41,7 @@ function RunHarness() {
       [],
     ),
   );
-  return <GameScreen session={session} onChange={setSession} onNewGame={noop} />;
+  return <GameScreen session={session} onChange={setSession} onNewGame={noop} onNextGame={noop} />;
 }
 
 const noop = () => undefined;
@@ -185,7 +187,7 @@ function SplitHarness() {
       [],
     ),
   );
-  return <GameScreen session={session} onChange={setSession} onNewGame={noop} />;
+  return <GameScreen session={session} onChange={setSession} onNewGame={noop} onNextGame={noop} />;
 }
 
 const setLabels = (n: number) =>
@@ -255,7 +257,7 @@ function BotsFirstHarness() {
       [],
     ),
   );
-  return <GameScreen session={session} onChange={setSession} onNewGame={noop} />;
+  return <GameScreen session={session} onChange={setSession} onNewGame={noop} onNextGame={noop} />;
 }
 
 const status = () => screen.getByRole('status').textContent;
@@ -366,9 +368,35 @@ function exhausted(): Game {
   };
 }
 
-function ScoresHarness({ game, onNewGame }: { game: Game; onNewGame: () => void }) {
-  const [session, setSession] = useState<Session>(() => fromGame(game, []));
-  return <GameScreen session={session} onChange={setSession} onNewGame={onNewGame} />;
+function ScoresHarness({
+  game,
+  onNewGame = noop,
+  onNextGame = noop,
+  match = newMatch(SINGLE),
+}: {
+  game: Game;
+  onNewGame?: (setup: Setup) => void;
+  onNextGame?: () => void;
+  match?: Match;
+}) {
+  const [session, setSession] = useState<Session>(() =>
+    fromGame(game, [], undefined, [], undefined, { lineup: FIRST_LINEUP, match }),
+  );
+  return (
+    <GameScreen
+      session={session}
+      onChange={setSession}
+      onNewGame={onNewGame}
+      onNextGame={onNextGame}
+    />
+  );
+}
+
+/** Plays out `exhausted()`: the person passes on an empty pool, and the bots after them. */
+function passToTheEnd() {
+  fireEvent.click(screen.getByRole('button', { name: 'Pass' }));
+  const skip = screen.queryByRole('button', { name: 'Skip' });
+  if (skip !== null) fireEvent.click(skip);
 }
 
 const scoreRows = () =>
@@ -396,10 +424,8 @@ describe('the end of the game', () => {
   });
 
   it('ends on the lowest rack when the pool has run out and nobody can play', () => {
-    render(<ScoresHarness game={exhausted()} onNewGame={noop} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Pass' }));
-    const skip = screen.queryByRole('button', { name: 'Skip' });
-    if (skip !== null) fireEvent.click(skip);
+    render(<ScoresHarness game={exhausted()} />);
+    passToTheEnd();
     const scores = screen.getByRole('region', { name: 'Scores' });
     expect(within(scores).getByRole('heading').textContent).toBe('You won.');
     expect(scores.textContent).toContain('The pool ran out');
@@ -412,13 +438,58 @@ describe('the end of the game', () => {
   it('starts again from the score screen, against the bots picked there (KUB-41)', () => {
     const onNewGame = vi.fn();
     render(<ScoresHarness game={exhausted()} onNewGame={onNewGame} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Pass' }));
-    const skip = screen.queryByRole('button', { name: 'Skip' });
-    if (skip !== null) fireEvent.click(skip);
+    passToTheEnd();
+    expect(screen.queryByRole('region', { name: 'Match' })).toBeNull();
     const second = screen.getByRole('group', { name: 'Second bot' });
     fireEvent.click(within(second).getByRole('radio', { name: 'Hard' }));
     fireEvent.click(screen.getByRole('button', { name: 'New game' }));
-    expect(onNewGame).toHaveBeenCalledExactlyOnceWith(['medium', 'hard']);
+    expect(onNewGame).toHaveBeenCalledExactlyOnceWith({
+      lineup: ['medium', 'hard'],
+      format: SINGLE,
+    });
+  });
+});
+
+describe('a match (KUB-42)', () => {
+  const matchRows = () =>
+    within(screen.getByRole('region', { name: 'Match' }))
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => row.textContent);
+
+  it('shows the running totals after a game and deals the next one', () => {
+    const onNextGame = vi.fn();
+    const match: Match = { format: { kind: 'games', games: 3 }, played: [[-30, 50, -20]] };
+    render(<ScoresHarness game={exhausted()} match={match} onNextGame={onNextGame} />);
+    passToTheEnd();
+    const region = screen.getByRole('region', { name: 'Match' });
+    expect(region.textContent).toContain('After game 2 of 3.');
+    // Each total is the game before plus this one's score, the highest first.
+    const scores = screen.getByRole('region', { name: 'Scores' });
+    const won = within(scores).getAllByRole('row')[1]?.textContent ?? '';
+    expect(won).toMatch(/^You11\+\d+$/);
+    expect(matchRows()).toHaveLength(3);
+    expect(matchRows()).toContain('P1+45');
+    expect(screen.queryByRole('group', { name: 'First bot' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Next game' }));
+    expect(onNextGame).toHaveBeenCalledOnce();
+  });
+
+  it('says who took the match after its last game, and offers a new one', () => {
+    const onNewGame = vi.fn();
+    const match: Match = { format: { kind: 'points', target: 100 }, played: [[10, 900, -910]] };
+    render(<ScoresHarness game={exhausted()} match={match} onNewGame={onNewGame} />);
+    passToTheEnd();
+    // The person wins this game by 787, but the first bot's 900 less its 5 still leads.
+    expect(screen.getByRole('region', { name: 'Match' }).textContent).toContain(
+      'P1 won the match.',
+    );
+    expect(screen.queryByRole('button', { name: 'Next game' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'New game' }));
+    expect(onNewGame).toHaveBeenCalledExactlyOnceWith({
+      lineup: FIRST_LINEUP,
+      format: { kind: 'points', target: 100 },
+    });
   });
 });
 

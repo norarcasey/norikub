@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { layout } from '../../../../packages/core/src/fixtures.test-helpers.ts';
+import { SINGLE } from '../../../../packages/core/src/match.ts';
 import {
   botNames,
   drawTile,
@@ -9,7 +10,9 @@ import {
   moveTile,
   moveTiles,
   newSession,
+  nextGame,
   probe,
+  setupOf,
   undoTurn,
 } from './session.ts';
 import type { Session } from './session.ts';
@@ -41,12 +44,54 @@ describe('the bots at the table (KUB-41)', () => {
 
   it('play the seats at the levels picked', () => {
     // The person draws; each bot then plays its turn at its own level before the next.
-    const s = newSession(7, ['hard', 'easy']);
+    const s = newSession(7, { lineup: ['hard', 'easy'], format: SINGLE });
     expect(s.lineup).toEqual(['hard', 'easy']);
     expect(s.game.players.map((player) => player.name)).toEqual(['You', 'Hard bot', 'Easy bot']);
     const next = drawTile(s);
     expect(next.lineup).toEqual(['hard', 'easy']);
     expect(next.game.current).toBe(0);
+  });
+});
+
+describe('a match (KUB-42)', () => {
+  const finished = (s: Session, scores: readonly number[]): Session => ({
+    ...s,
+    game: { ...s.game, status: { kind: 'over', reason: 'rack-emptied', winner: 0, scores } },
+    turn: null,
+  });
+
+  it('seats one to three bots', () => {
+    for (const lineup of [['easy'], ['easy', 'medium', 'hard']] as const) {
+      const s = newSession(7, { lineup, format: SINGLE });
+      expect(s.game.players).toHaveLength(lineup.length + 1);
+      expect(s.turn?.rack).toHaveLength(14);
+    }
+  });
+
+  it('deals the next game against the same bots, with the last one’s scores kept', () => {
+    const s = newSession(7, { lineup: ['hard', 'easy'], format: { kind: 'games', games: 2 } });
+    const next = nextGame(finished(s, [20, -5, -15]), 8);
+    expect(next?.lineup).toEqual(['hard', 'easy']);
+    expect(next?.match.played).toEqual([[20, -5, -15]]);
+    expect(next?.game.status.kind).toBe('playing');
+    expect(setupOf(next ?? s)).toEqual({
+      lineup: ['hard', 'easy'],
+      format: { kind: 'games', games: 2 },
+    });
+  });
+
+  it('deals no next game mid-game, or once the match is over', () => {
+    const s = newSession(7, { lineup: ['hard', 'easy'], format: { kind: 'games', games: 2 } });
+    expect(nextGame(s, 8)).toBeNull();
+    const second = nextGame(finished(s, [20, -5, -15]), 8);
+    if (second === null) throw new Error('no second game');
+    expect(nextGame(finished(second, [20, -5, -15]), 9)).toBeNull();
+    expect(nextGame(finished(newSession(7), [20, -5, -15]), 8)).toBeNull();
+  });
+
+  it('carries the match through a turn', () => {
+    const s = newSession(7, { lineup: ['hard', 'easy'], format: { kind: 'points', target: 200 } });
+    expect(drawTile(s).match).toEqual(s.match);
   });
 });
 

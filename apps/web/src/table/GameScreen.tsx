@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode, PointerEvent as ReactPointerEvent } from 'react';
 
+import { standing } from '@norikub/core/match';
 import { arrangeSet, judgeSet, splitFor } from '@norikub/core/sets';
 import type { Status } from '@norikub/core/game';
 import type { Tile } from '@norikub/core/tiles';
@@ -17,13 +18,15 @@ import {
   pickedText,
   refusalText,
   splitText,
+  standingText,
   tileName,
   winnerText,
 } from './messages.ts';
 import { pileSpot } from './pile.ts';
-import { LineupPicker } from './LineupPicker.tsx';
+import { GameSetup } from './GameSetup.tsx';
 import { FLIGHT_MS, usePlayback } from './playback.ts';
-import type { Lineup, Session } from './session.ts';
+import { PERSON, setupOf } from './session.ts';
+import type { Session, Setup } from './session.ts';
 import './table.css';
 
 type TileEvents = {
@@ -215,22 +218,92 @@ export function GameScreen({
   session,
   onChange,
   onNewGame,
+  onNextGame,
   barEnd,
 }: {
   session: Session;
   onChange: (next: Session) => void;
-  /** A new deal against the bots picked for it (KUB-41). */
-  onNewGame: (lineup: Lineup) => void;
+  /** A new sitting against the bots picked for it (KUB-41), for as long as picked (KUB-42). */
+  onNewGame: (setup: Setup) => void;
+  /** The next game of the match, once this one is over and the match is not (KUB-42). */
+  onNextGame: () => void;
   /** Shown at the end of the game bar, after the pool count: the Account button (KUB-29). */
   barEnd?: ReactNode;
 }) {
+  const board = boardOf(session);
   return (
     <TableScreen
-      board={boardOf(session)}
+      board={board}
       actions={sessionActions(session, onChange)}
       barEnd={barEnd}
-      afterScores={<LineupPicker initial={session.lineup} action="New game" onDeal={onNewGame} />}
+      afterScores={
+        <MatchNext
+          session={session}
+          names={board.names}
+          onNewGame={onNewGame}
+          onNextGame={onNextGame}
+        />
+      }
     />
+  );
+}
+
+/**
+ * Under a finished game's scores (KUB-42): for a match, everyone's running total and where it
+ * stands, then the next game while there is one, and a new sitting once there is not. Every
+ * total is the core's (`standing`), from the engine's scores.
+ */
+function MatchNext({
+  session,
+  names,
+  onNewGame,
+  onNextGame,
+}: {
+  session: Session;
+  names: readonly string[];
+  onNewGame: (setup: Setup) => void;
+  onNextGame: () => void;
+}) {
+  const { game, match } = session;
+  const now = standing(match, game.status, game.players.length);
+  const single = match.format.kind === 'single';
+  return (
+    <>
+      {!single && (
+        <section className="match" aria-label="Match">
+          <p>{standingText(match.format, now, names, PERSON)}</p>
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Player</th>
+                <th scope="col">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {now.totals
+                .map((total, seat) => ({ seat, total }))
+                .sort((a, b) => b.total - a.total)
+                .map(({ seat, total }) => (
+                  <tr
+                    key={seat}
+                    data-winner={(now.over && now.leaders.includes(seat)) || undefined}
+                  >
+                    <th scope="row">{seat === PERSON ? 'You' : names[seat]}</th>
+                    <td>{total > 0 ? `+${total}` : total}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+      {now.over ? (
+        <GameSetup initial={setupOf(session)} action="New game" onDeal={onNewGame} />
+      ) : (
+        <button type="button" className="primary" onClick={onNextGame}>
+          Next game
+        </button>
+      )}
+    </>
   );
 }
 
