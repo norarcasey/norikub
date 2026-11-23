@@ -1,4 +1,5 @@
-import { takeBotTurn } from '@norikub/core/bot';
+import { botFor, takeBotTurn } from '@norikub/core/bot';
+import type { Level } from '@norikub/core/bot';
 import { newGame } from '@norikub/core/game';
 import type { Game } from '@norikub/core/game';
 import type { Tile } from '@norikub/core/tiles';
@@ -16,6 +17,31 @@ import type { Frame } from './replay.ts';
 
 /** The seat the person plays from; the other seats are bots. */
 export const PERSON = 0;
+
+/**
+ * Who plays the seats after the person's, in seat order: a level for each bot, picked before
+ * the game (KUB-41). The engine never sees it: a level only chooses which bot is handed that
+ * seat's view, and the bot's turn goes through the engine like anyone's (invariant 1).
+ */
+export type Lineup = readonly Level[];
+
+/** The bots a game starts with when none were picked: the one bot there was before KUB-41. */
+export const FIRST_LINEUP: Lineup = ['medium', 'medium'];
+
+const LEVEL_NAMES: Readonly<Record<Level, string>> = {
+  easy: 'Easy bot',
+  medium: 'Medium bot',
+  hard: 'Hard bot',
+};
+
+/** The bots' names at the table: by level, lettered when two share one. */
+export function botNames(lineup: Lineup): string[] {
+  return lineup.map((level, i) => {
+    const same = lineup.filter((other) => other === level).length;
+    const nth = lineup.slice(0, i).filter((other) => other === level).length;
+    return same > 1 ? `${LEVEL_NAMES[level]} ${'ABC'.charAt(nth)}` : LEVEL_NAMES[level];
+  });
+}
 
 /**
  * What the person is told after an action. Every one of these carries what the engine said,
@@ -49,19 +75,22 @@ export type Session = {
   readonly replay: readonly Frame[];
   /** The face-down tiles' spots, parallel to `game.pool` (KUB-25). */
   readonly pile: Pile;
+  readonly lineup: Lineup;
 };
 
 /** Where on the rack a tile is let go: a row, and the place along it. */
 export type RackSpot = { readonly row: number; readonly col: number };
 
-export function newSession(seed: number): Session {
-  return fromGame(newGame({ names: ['You', 'Bot A', 'Bot B'], seed }), []);
+export function newSession(seed: number, lineup: Lineup = FIRST_LINEUP): Session {
+  const game = newGame({ names: ['You', ...botNames(lineup)], seed });
+  return fromGame(game, [], undefined, [], undefined, lineup);
 }
 
 /**
  * A session at the person's turn, after any bots due before it have played. With no rows
  * given, the rack is laid out as a fresh deal. `lead` is played back before the bots' turns:
  * the person's own draw. `pile` is the pile for `game.pool`; with none, the pile is dealt.
+ * `lineup` is who plays the other seats.
  */
 export function fromGame(
   game: Game,
@@ -69,8 +98,9 @@ export function fromGame(
   rows?: RackRows,
   lead: readonly Frame[] = [],
   pile?: Pile,
+  lineup: Lineup = FIRST_LINEUP,
 ): Session {
-  const played = playBots(game, fitPile(pile, game.pool.length));
+  const played = playBots(game, fitPile(pile, game.pool.length), lineup);
   const turn = played.game.status.kind === 'playing' ? startTurn(played.game) : null;
   const rack = played.game.players[PERSON]?.rack ?? [];
   const laidOut = rows === undefined ? dealRows(rack) : reconcileRows(rows, rack);
@@ -82,6 +112,7 @@ export function fromGame(
     notes: [...notes, ...played.notes],
     replay: [...lead, ...played.frames],
     pile: played.pile,
+    lineup,
   };
 }
 
@@ -92,6 +123,7 @@ export function fromGame(
 function playBots(
   game: Game,
   dealt: Pile,
+  lineup: Lineup,
 ): { game: Game; notes: Note[]; frames: Frame[]; pile: Pile } {
   const notes: Note[] = [];
   const frames: Frame[] = [];
@@ -100,7 +132,7 @@ function playBots(
   while (current.status.kind === 'playing' && current.current !== PERSON) {
     const seat = current.current;
     const before = current.players[seat]?.rack.length ?? 0;
-    const result = takeBotTurn(current);
+    const result = takeBotTurn(current, botFor(levelAt(lineup, seat)));
     const turnFrames = framesOf(current, result, pile);
     frames.push(...turnFrames);
     pile = turnFrames.at(-1)?.pile ?? pile;
@@ -112,6 +144,11 @@ function playBots(
     current = next;
   }
   return { game: current, notes, frames, pile };
+}
+
+/** The level of the bot in `seat`: the lineup skips the person's seat. */
+function levelAt(lineup: Lineup, seat: number): Level {
+  return lineup[seat > PERSON ? seat - 1 : seat] ?? 'medium';
 }
 
 /** What the engine would say to a move, without making it: used while a tile is dragged. */
@@ -213,7 +250,7 @@ export function finishTurn(session: Session): Session {
   if (!result.ok) {
     return { ...session, notes: result.faults.map((fault): Note => ({ kind: 'fault', fault })) };
   }
-  return fromGame(result.game, [], session.rows, [], session.pile);
+  return fromGame(result.game, [], session.rows, [], session.pile, session.lineup);
 }
 
 export function undoTurn(session: Session): Session {
@@ -247,5 +284,6 @@ export function drawTile(session: Session, pick?: number): Session {
       ? []
       : drawFrames(session.turn.start, result.game, pick, result.drawn, pile);
   const after = pick === undefined || result.drawn === null ? pile : takeFromPile(pile, pick);
-  return fromGame(result.game, [{ kind: 'drew', tile: result.drawn }], back, lead, after);
+  const notes: Note[] = [{ kind: 'drew', tile: result.drawn }];
+  return fromGame(result.game, notes, back, lead, after, session.lineup);
 }

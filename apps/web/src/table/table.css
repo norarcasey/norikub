@@ -514,3 +514,78 @@ body {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/*
+ * Picking the bots for a game (KUB-41): each bot a row of three pills, its level filled. The
+ * radios stay in the page for the keyboard and a screen reader; the pill is what is seen.
+ */
+.lineup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
+}
+
+.lineup fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.lineup legend {
+  float: left;
+  min-width: 6.5em;
+  margin-right: 4px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.lineup fieldset label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1.5px solid rgb(243 239 228 / 0.55);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lineup fieldset label:has(input:checked) {
+  border-color: var(--tile);
+  background: var(--tile);
+  color: var(--ink-black);
+}
+
+.lineup fieldset label:has(input:focus-visible) {
+  outline: 2px solid #ffd54a;
+  outline-offset: 2px;
+}
+
+.lineup fieldset input[type='radio'] {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.lineup .lineup-hint {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.8;
+}

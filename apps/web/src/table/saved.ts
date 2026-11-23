@@ -1,3 +1,4 @@
+import { levelSchema } from '@norikub/core/bot';
 import { gameSchema } from '@norikub/core/game';
 import { parse } from '@norikub/core/parse';
 import { tileSchema } from '@norikub/core/tiles';
@@ -6,7 +7,7 @@ import { z } from 'zod';
 
 import { fitPile } from './pile.ts';
 import { RACK_ROWS, reconcileRows } from './rack.ts';
-import { PERSON, fromGame } from './session.ts';
+import { FIRST_LINEUP, PERSON, fromGame } from './session.ts';
 import type { Session } from './session.ts';
 
 const rowsSchema = z
@@ -28,28 +29,37 @@ const rowsSchema = z
  * replay, which `Session` already says is only to watch (a reload mid-playback resumes at the
  * person's turn, the bots' turns already in `game`).
  */
-export const savedSchema = z
-  .object({
-    version: z.literal(1),
-    game: gameSchema,
-    turn: z
-      .object({
-        rack: z.array(tileSchema).readonly(),
-        table: z.array(z.array(tileSchema).readonly()).readonly(),
-      })
-      .readonly()
-      .nullable(),
-    rows: rowsSchema,
-    startRows: rowsSchema,
-    pile: z.array(z.number().int().min(0)).readonly(),
-  })
-  .readonly();
+const savedFields = {
+  game: gameSchema,
+  turn: z
+    .object({
+      rack: z.array(tileSchema).readonly(),
+      table: z.array(z.array(tileSchema).readonly()).readonly(),
+    })
+    .readonly()
+    .nullable(),
+  rows: rowsSchema,
+  startRows: rowsSchema,
+  pile: z.array(z.number().int().min(0)).readonly(),
+};
+
+/**
+ * Version 2 adds the lineup, the level of each bot (KUB-41). A version 1 game was played
+ * against the one bot there was, which is the medium one, and resumes against it.
+ */
+export const savedSchema = z.union([
+  z
+    .object({ version: z.literal(2), ...savedFields, lineup: z.array(levelSchema).readonly() })
+    .readonly(),
+  z.object({ version: z.literal(1), ...savedFields }).readonly(),
+]);
 export type Saved = z.infer<typeof savedSchema>;
 
 export function toSaved(session: Session): Saved {
   const { turn } = session;
   return {
-    version: 1,
+    version: 2,
+    lineup: session.lineup,
     game: session.game,
     turn: turn === null ? null : { rack: turn.rack, table: turn.table },
     rows: session.rows,
@@ -68,11 +78,12 @@ export function fromSaved(input: unknown): Session | null {
   if (!parsed.ok) return null;
   const saved = parsed.value;
   const { game } = saved;
+  const lineup = saved.version === 2 ? saved.lineup : FIRST_LINEUP;
   const turn =
     saved.turn === null || game.current !== PERSON
       ? null
       : resumeTurn(game, saved.turn.rack, saved.turn.table);
-  if (turn === null) return fromGame(game, [], saved.startRows, [], saved.pile);
+  if (turn === null) return fromGame(game, [], saved.startRows, [], saved.pile, lineup);
   return {
     game,
     turn,
@@ -81,5 +92,6 @@ export function fromSaved(input: unknown): Session | null {
     notes: [],
     replay: [],
     pile: fitPile(saved.pile, game.pool.length),
+    lineup,
   };
 }

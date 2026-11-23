@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { layout } from '../../../../packages/core/src/fixtures.test-helpers.ts';
 import {
+  botNames,
   drawTile,
   finishTurn,
   fromGame,
@@ -31,6 +32,23 @@ function session(): Session {
     [],
   );
 }
+
+describe('the bots at the table (KUB-41)', () => {
+  it('are named by level, lettered when two share one', () => {
+    expect(botNames(['easy', 'hard'])).toEqual(['Easy bot', 'Hard bot']);
+    expect(botNames(['medium', 'medium'])).toEqual(['Medium bot A', 'Medium bot B']);
+  });
+
+  it('play the seats at the levels picked', () => {
+    // The person draws; each bot then plays its turn at its own level before the next.
+    const s = newSession(7, ['hard', 'easy']);
+    expect(s.lineup).toEqual(['hard', 'easy']);
+    expect(s.game.players.map((player) => player.name)).toEqual(['You', 'Hard bot', 'Easy bot']);
+    const next = drawTile(s);
+    expect(next.lineup).toEqual(['hard', 'easy']);
+    expect(next.game.current).toBe(0);
+  });
+});
 
 describe('a session', () => {
   it('starts at the person’s turn with a full rack', () => {

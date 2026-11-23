@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { bestSets, takeBotTurn } from './bot.ts';
-import type { Bot, Proposal } from './bot.ts';
+import { LEVELS, bestSets, botFor, movesToward, takeBotTurn } from './bot.ts';
+import type { Bot, Level, Proposal } from './bot.ts';
 import { layout, ts } from './fixtures.test-helpers.ts';
 import { finish, gameSchema, newGame, seatView } from './game.ts';
 import type { Game, SeatView } from './game.ts';
@@ -125,6 +125,137 @@ describe('after the first meld', () => {
   });
 });
 
+describe('the hard bot', () => {
+  const hard = botFor('hard');
+
+  function hardTurn(game: Game): ReturnType<typeof takeBotTurn> {
+    const result = takeBotTurn(game, hard);
+    expect(result.accepted).toBe(true);
+    return result;
+  }
+
+  it('splits a run to fit a tile, which the medium bot cannot', () => {
+    const game = layout(
+      [{ rack: ['red-5-b', 'blue-1-a'], hasMelded: true }, { rack: [] }],
+      [['red-3-a', 'red-4-a', 'red-5-a', 'red-6-a', 'red-7-a']],
+    );
+    expect(takeBotTurn(game).proposal).toEqual({ kind: 'draw' });
+    const { game: next } = hardTurn(game);
+    expect(next.players[0]?.rack).toEqual(ts('blue-1-a'));
+    expect(next.table.flat()).toHaveLength(6);
+  });
+
+  it('takes a joker back by replacing it and plays it again in the same turn', () => {
+    const game = layout(
+      [{ rack: ['red-5-a', 'blue-9-a', 'black-9-a', 'orange-2-a'], hasMelded: true }, { rack: [] }],
+      [['red-4-a', 'joker-a', 'red-6-a']],
+    );
+    const { game: next } = hardTurn(game);
+    expect(ids(next.table).sort()).toEqual([
+      ['black-9-a', 'blue-9-a', 'joker-a'],
+      ['red-4-a', 'red-5-a', 'red-6-a'],
+    ]);
+    expect(next.players[0]?.rack).toEqual(ts('orange-2-a'));
+  });
+
+  it('reworks the whole table to empty its rack', () => {
+    // Two groups become three runs: no tile of the rack fits any set as it stands.
+    const game = layout(
+      [{ rack: ['red-6-a', 'blue-6-a', 'black-6-a'], hasMelded: true }, { rack: ['red-1-a'] }],
+      [
+        ['red-4-a', 'blue-4-a', 'black-4-a'],
+        ['red-5-a', 'blue-5-a', 'black-5-a'],
+      ],
+    );
+    expect(hardTurn(game).game.status).toMatchObject({ kind: 'over', winner: 0 });
+  });
+
+  it('melds from its rack alone, with as many tiles as reach 30', () => {
+    const game = layout(
+      [
+        {
+          rack: ['red-10-a', 'red-11-a', 'red-12-a', 'blue-1-a', 'blue-2-a', 'blue-3-a', 'red-9-a'],
+        },
+        { rack: [], hasMelded: true },
+      ],
+      [['red-13-a', 'blue-13-a', 'black-13-a']],
+    );
+    const { game: next } = hardTurn(game);
+    expect(ids(next.table)).toEqual([
+      ['black-13-a', 'blue-13-a', 'red-13-a'],
+      ['blue-1-a', 'blue-2-a', 'blue-3-a'],
+      ['red-10-a', 'red-11-a', 'red-12-a', 'red-9-a'],
+    ]);
+  });
+
+  it('draws rather than meld under 30', () => {
+    const game = layout([{ rack: ['red-1-a', 'red-2-a', 'red-3-a'] }, { rack: [] }]);
+    expect(hardTurn(game).proposal).toEqual({ kind: 'draw' });
+  });
+
+  it('draws when nothing of its rack can go anywhere', () => {
+    const game = layout(
+      [{ rack: ['red-1-a', 'blue-9-a'], hasMelded: true }, { rack: [] }],
+      [['black-4-a', 'black-5-a', 'black-6-a']],
+    );
+    expect(hardTurn(game).proposal).toEqual({ kind: 'draw' });
+  });
+});
+
+describe('the easy bot', () => {
+  it('lays its own sets but never adds to the table', () => {
+    const game = layout(
+      [{ rack: ['blue-7-a', 'red-1-a', 'red-2-a', 'red-3-a'], hasMelded: true }, { rack: [] }],
+      [['blue-4-a', 'blue-5-a', 'blue-6-a']],
+    );
+    const result = takeBotTurn(game, botFor('easy'));
+    expect(result.accepted).toBe(true);
+    expect(ids(result.game.table)).toEqual([
+      ['blue-4-a', 'blue-5-a', 'blue-6-a'],
+      ['red-1-a', 'red-2-a', 'red-3-a'],
+    ]);
+    expect(result.game.players[0]?.rack).toEqual(ts('blue-7-a'));
+  });
+
+  it('draws with nothing of its own to lay', () => {
+    const game = layout(
+      [{ rack: ['blue-7-a'], hasMelded: true }, { rack: [] }],
+      [['blue-4-a', 'blue-5-a', 'blue-6-a']],
+    );
+    expect(takeBotTurn(game, botFor('easy')).proposal).toEqual({ kind: 'draw' });
+  });
+
+  it('melds only at 30', () => {
+    const game = layout([{ rack: ['red-1-a', 'red-2-a', 'red-3-a'] }, { rack: [] }]);
+    expect(takeBotTurn(game, botFor('easy')).proposal).toEqual({ kind: 'draw' });
+  });
+});
+
+describe('the moves toward a table', () => {
+  it('keeps a set whole where it stays, and moves only what it lacks', () => {
+    const start = [ts('red-4-a', 'red-5-a', 'red-6-a')];
+    const moves = movesToward(start, [ts('red-4-a', 'red-5-a', 'red-6-a', 'red-7-a')]);
+    expect(moves).toEqual([{ kind: 'to-set', tileId: 'red-7-a', set: 0 }]);
+  });
+
+  it('follows a set as an emptied one before it drops out', () => {
+    // The group of 9s empties into the new run, and the run that was second becomes first.
+    const start = [
+      ts('red-9-a', 'blue-9-a', 'black-9-a'),
+      ts('orange-1-a', 'orange-2-a', 'orange-3-a'),
+    ];
+    const target = [
+      ts('orange-1-a', 'orange-2-a', 'orange-3-a', 'orange-4-a'),
+      ts('red-9-a', 'red-10-a', 'red-11-a'),
+      ts('blue-9-a', 'blue-10-a', 'blue-11-a'),
+      ts('black-9-a', 'black-10-a', 'black-11-a'),
+    ];
+    const moves = movesToward(start, target);
+    expect(moves).toContainEqual({ kind: 'to-set', tileId: 'orange-4-a', set: 1 });
+    expect(moves.filter((m) => m.kind === 'to-new-set')).toHaveLength(2);
+  });
+});
+
 describe('the best sets from a rack', () => {
   it('splits a run to make a group when that lays down more', () => {
     // 10-11-12-13 alone is 46 points and four tiles; 10-11-12 and three 13s are 72 and six.
@@ -230,6 +361,36 @@ describe('bots playing whole games', () => {
     // table would end every game on an empty pool.
     expect(won).toBeGreaterThan(seeds.length / 4);
     expect(borrowedOrAdded).toBeGreaterThan(0);
+  }, 60_000);
+});
+
+describe('every level playing whole games', () => {
+  // 20 seeded games of each lineup below; measured 22 Nov 2026 on this laptop, the slowest
+  // hard turn took 57 ms and the mean 1.9 ms over 180 such games, and hard won 169 of them.
+  const lineups: readonly (readonly Level[])[] = [
+    ['easy', 'medium', 'hard'],
+    ['hard', 'hard', 'easy'],
+  ];
+  it('only ever propose turns the engine accepts, and hard wins most', () => {
+    const wins = new Map<Level, number>(LEVELS.map((level) => [level, 0]));
+    for (const levels of lineups) {
+      for (let seed = 1; seed <= 20; seed++) {
+        let game = newGame({ names: [...levels], seed });
+        let turns = 0;
+        while (game.status.kind === 'playing') {
+          const level = levels[game.current] ?? 'medium';
+          const result = takeBotTurn(game, botFor(level));
+          if (!result.accepted) throw new Error(`${level}, seed ${seed}, turn ${turns}: refused`);
+          game = result.game;
+          turns++;
+          if (turns > 1000) throw new Error(`seed ${seed} did not end`);
+        }
+        const winner = levels[game.status.winner];
+        if (winner !== undefined) wins.set(winner, (wins.get(winner) ?? 0) + 1);
+        expect(parse(gameSchema, game).ok).toBe(true);
+      }
+    }
+    expect(wins.get('hard')).toBeGreaterThan(30);
   }, 60_000);
 });
 

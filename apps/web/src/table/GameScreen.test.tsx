@@ -409,14 +409,16 @@ describe('the end of the game', () => {
     expect(p2).toMatch(/^P2\d+\d+-\d+$/);
   });
 
-  it('starts again from the score screen', () => {
+  it('starts again from the score screen, against the bots picked there (KUB-41)', () => {
     const onNewGame = vi.fn();
     render(<ScoresHarness game={exhausted()} onNewGame={onNewGame} />);
     fireEvent.click(screen.getByRole('button', { name: 'Pass' }));
     const skip = screen.queryByRole('button', { name: 'Skip' });
     if (skip !== null) fireEvent.click(skip);
+    const second = screen.getByRole('group', { name: 'Second bot' });
+    fireEvent.click(within(second).getByRole('radio', { name: 'Hard' }));
     fireEvent.click(screen.getByRole('button', { name: 'New game' }));
-    expect(onNewGame).toHaveBeenCalledOnce();
+    expect(onNewGame).toHaveBeenCalledExactlyOnceWith(['medium', 'hard']);
   });
 });
 

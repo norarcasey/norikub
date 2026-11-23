@@ -20,9 +20,10 @@ import {
   winnerText,
 } from './messages.ts';
 import { fitPile, pileSpot } from './pile.ts';
+import { LineupPicker } from './LineupPicker.tsx';
 import { FLIGHT_MS, usePlayback } from './playback.ts';
 import { PERSON, drawTile, finishTurn, moveTile, moveTiles, probe, undoTurn } from './session.ts';
-import type { Session } from './session.ts';
+import type { Lineup, Session } from './session.ts';
 import './table.css';
 
 type TileEvents = {
@@ -157,7 +158,17 @@ type Over = Extract<Status, { kind: 'over' }>;
  * engine's (`finish`); the points left are shown beside the score so a reader can see where
  * the score came from. Highest score first, the winner always at the top.
  */
-function ScoreScreen({ game, over, onNewGame }: { game: Game; over: Over; onNewGame: () => void }) {
+function ScoreScreen({
+  game,
+  over,
+  lineup,
+  onNewGame,
+}: {
+  game: Game;
+  over: Over;
+  lineup: Lineup;
+  onNewGame: (lineup: Lineup) => void;
+}) {
   const rows = game.players
     .map((player, seat) => ({
       seat,
@@ -191,9 +202,7 @@ function ScoreScreen({ game, over, onNewGame }: { game: Game; over: Over; onNewG
           ))}
         </tbody>
       </table>
-      <button type="button" className="primary" onClick={onNewGame}>
-        New game
-      </button>
+      <LineupPicker initial={lineup} action="New game" onDeal={onNewGame} />
     </section>
   );
 }
@@ -206,7 +215,8 @@ export function GameScreen({
 }: {
   session: Session;
   onChange: (next: Session) => void;
-  onNewGame: () => void;
+  /** A new deal against the bots picked for it (KUB-41). */
+  onNewGame: (lineup: Lineup) => void;
   /** Shown at the end of the game bar, after the pool count: the Account button (KUB-29). */
   barEnd?: ReactNode;
 }) {
@@ -483,7 +493,7 @@ export function GameScreen({
       </div>
 
       {watching === null && status.kind === 'over' && (
-        <ScoreScreen game={game} over={status} onNewGame={onNewGame} />
+        <ScoreScreen game={game} over={status} lineup={session.lineup} onNewGame={onNewGame} />
       )}
 
       <section className="rack" aria-label="Your rack">

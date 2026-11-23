@@ -1,7 +1,11 @@
+import { z } from 'zod';
+
 import { FIRST_MELD_POINTS, draw, seatView } from './game.ts';
 import type { Game, SeatView } from './game.ts';
 import { judgeSet } from './sets.ts';
-import { COLOURS } from './tiles.ts';
+import { solveTable } from './solver.ts';
+import type { Worth } from './solver.ts';
+import { COLOURS, JOKER_PENALTY } from './tiles.ts';
 import type { Tile } from './tiles.ts';
 import { endTurn, move, startTurn } from './turn.ts';
 import type { Move, Turn } from './turn.ts';
@@ -16,6 +20,23 @@ export type Proposal =
 
 /** A bot is a function of what its seat can see, and of nothing else (invariant 2). */
 export type Bot = (view: SeatView) => Proposal;
+
+/**
+ * How hard a bot plays, which a person picks for each seat before a game (KUB-41).
+ * - easy lays down sets from its own rack and never builds on the table;
+ * - medium is the first bot, `proposeTurn`: its own sets, then single tiles onto the table's
+ *   sets, then a spare tile borrowed from a long set;
+ * - hard makes any table a person could, through `solveTable`.
+ */
+export const LEVELS = ['easy', 'medium', 'hard'] as const;
+export const levelSchema = z.enum(LEVELS);
+export type Level = z.infer<typeof levelSchema>;
+
+export function botFor(level: Level): Bot {
+  if (level === 'easy') return proposeEasyTurn;
+  if (level === 'hard') return proposeHardTurn;
+  return proposeTurn;
+}
 
 /** A set the bot could make, as the kinds of tile it needs: `red-5`, `joker`. */
 type Candidate = { readonly needs: readonly string[]; readonly points: number };
@@ -89,6 +110,105 @@ export function proposeTurn(view: SeatView): Proposal {
     }
   }
   return moves.length > 0 ? { kind: 'play', moves } : { kind: 'draw' };
+}
+
+/**
+ * The easy bot: the first meld as the medium bot makes it, and after it only sets from its own
+ * rack. It never adds to a set on the table, so a tile that fits one stays in its rack.
+ */
+export function proposeEasyTurn(view: SeatView): Proposal {
+  const sets = bestSets(view.rack, view.hasMelded ? 'tiles' : 'points');
+  const points = sets.reduce((sum, set) => sum + pointsOf(set), 0);
+  if (sets.length === 0 || (!view.hasMelded && points < FIRST_MELD_POINTS)) {
+    return { kind: 'draw' };
+  }
+  return { kind: 'play', moves: movesToward(view.table, [...view.table, ...sets]) };
+}
+
+/**
+ * Worth to the hard bot: a tile laid down first, so it plays as many as it can, and among
+ * ways of playing as many, the one that leaves the least in its rack to score against it.
+ */
+const tilesFirst: Worth = (tile) => 1000 + (tile.joker ? JOKER_PENALTY : tile.value);
+const pointsOnly: Worth = (tile) => tile.value;
+
+/**
+ * The hard bot: the best table it can make from the whole table and its rack (`solveTable`),
+ * which is any move a person could make. Before its first meld the table is not its to touch,
+ * so it melds from the rack alone: as many tiles as it can if they reach 30, or else the most
+ * points, if those do.
+ */
+export function proposeHardTurn(view: SeatView): Proposal {
+  if (!view.hasMelded) {
+    const meld = [tilesFirst, pointsOnly]
+      .map((worth) => solveTable([], view.rack, worth) ?? [])
+      .find((sets) => sets.reduce((sum, set) => sum + pointsOf(set), 0) >= FIRST_MELD_POINTS);
+    if (meld === undefined) return { kind: 'draw' };
+    return { kind: 'play', moves: movesToward(view.table, [...view.table, ...meld]) };
+  }
+  const sets = solveTable(view.table.flat(), view.rack, tilesFirst);
+  if (sets === null) return proposeTurn(view);
+  const placed = sets.flat().length - view.table.flat().length;
+  if (placed === 0) return { kind: 'draw' };
+  return { kind: 'play', moves: movesToward(view.table, sets) };
+}
+
+/**
+ * The moves that turn the table as it is into `target`, which holds every tile on it and some
+ * from the rack. A target set keeps the place of the old set it shares most with, and only the
+ * tiles it lacks move onto it, so a tile added to a run is one move and not the whole run
+ * rebuilt. Every other set is started anew. Each move names its set by the index it has when
+ * the move is made, found from a tile that stays in it: the engine drops a set its last tile
+ * leaves, and the indices after it move up.
+ */
+export function movesToward(
+  start: readonly (readonly Tile[])[],
+  target: readonly (readonly Tile[])[],
+): Move[] {
+  let table: Tile[][] = start.map((set) => [...set]);
+  const moves: Move[] = [];
+  const apply = (tile: Tile, m: Move): void => {
+    moves.push(m);
+    const next = table.map((set) => set.filter((t) => t.id !== tile.id));
+    if (m.kind === 'to-new-set') next.push([tile]);
+    if (m.kind === 'to-set') next[m.set]?.push(tile);
+    table = next.filter((set) => set.length > 0);
+  };
+  const indexOf = (id: string): number => table.findIndex((set) => set.some((t) => t.id === id));
+
+  const claimed = new Set<number>();
+  const homed = target.map((set) => {
+    const ids = new Set(set.map((tile) => tile.id));
+    let home = -1;
+    let overlap = 0;
+    start.forEach((old, i) => {
+      const shared = old.filter((tile) => ids.has(tile.id)).length;
+      if (!claimed.has(i) && shared > overlap) {
+        home = i;
+        overlap = shared;
+      }
+    });
+    if (home !== -1) claimed.add(home);
+    const anchor = start[home]?.find((tile) => ids.has(tile.id));
+    return { set, anchor };
+  });
+
+  for (const { set, anchor } of homed) {
+    if (anchor === undefined) continue;
+    for (const tile of set) {
+      if (indexOf(tile.id) === indexOf(anchor.id)) continue;
+      apply(tile, { kind: 'to-set', tileId: tile.id, set: indexOf(anchor.id) });
+    }
+  }
+  for (const { set, anchor } of homed) {
+    const [first, ...rest] = set;
+    if (anchor !== undefined || first === undefined) continue;
+    apply(first, { kind: 'to-new-set', tileId: first.id });
+    for (const tile of rest) {
+      apply(tile, { kind: 'to-set', tileId: tile.id, set: indexOf(first.id) });
+    }
+  }
+  return moves;
 }
 
 /** Two rack tiles and one tile a long set can spare that make a set together, if any do. */

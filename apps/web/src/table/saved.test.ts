@@ -46,6 +46,18 @@ describe('a saved session', () => {
     expect(back?.turn).toBeNull();
   });
 
+  it('keeps the bots picked for the game (KUB-41)', () => {
+    const picked = newSession(7, ['easy', 'hard']);
+    expect(fromSaved(reloaded(toSaved(picked)))?.lineup).toEqual(['easy', 'hard']);
+  });
+
+  it('resumes a game saved before bots had levels against the medium bot it was playing', () => {
+    const { game, turn, rows, startRows, pile } = toSaved(midTurn);
+    const back = fromSaved(reloaded({ version: 1, game, turn, rows, startRows, pile }));
+    expect(back?.lineup).toEqual(['medium', 'medium']);
+    expect(back?.turn).toEqual(midTurn.turn);
+  });
+
   it('is refused when it is not a game', () => {
     expect(fromSaved(null)).toBeNull();
     expect(fromSaved({ version: 2 })).toBeNull();

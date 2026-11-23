@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Account } from './account/port.ts';
@@ -25,6 +25,35 @@ it('hands every change to be saved before it is shown (invariant 3)', () => {
   expect(onSave).toHaveBeenCalledOnce();
   expect(shown).toEqual(['']);
   expect(screen.getByRole('status').textContent).not.toBe('');
+});
+
+describe('picking the bots (KUB-41)', () => {
+  it('deals a new game mid-game against the bots picked, and saves it first', () => {
+    const onSave = vi.fn();
+    render(<App initial={newSession(7)} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: 'New game' }));
+    const dialog = screen.getByRole('dialog', { name: 'New game' });
+    const first = within(dialog).getByRole('group', { name: 'First bot' });
+    const second = within(dialog).getByRole('group', { name: 'Second bot' });
+    fireEvent.click(within(first).getByRole('radio', { name: 'Hard' }));
+    fireEvent.click(within(second).getByRole('radio', { name: 'Hard' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Deal a new game' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ lineup: ['hard', 'hard'] });
+    const opponents = screen.getByRole('list', { name: 'Opponents' }).textContent;
+    expect(opponents).toContain('Hard bot A');
+    expect(opponents).toContain('Hard bot B');
+  });
+
+  it('leaves the game as it was when the picker is closed', () => {
+    const onSave = vi.fn();
+    render(<App initial={newSession(7)} onSave={onSave} />);
+    fireEvent.click(screen.getByRole('button', { name: 'New game' }));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onSave).not.toHaveBeenCalled();
+  });
 });
 
 describe('the account', () => {
