@@ -120,10 +120,31 @@ Who plays first is a random seat at the deal, so sitting down first is not an ad
 
 ### Bots at a friends' table
 
-An empty seat can be a bot. The object runs `takeBotTurn` with that seat's `seatView`, the same
-call the bot game makes on the device, so the bot is still handed only what a person in its
-seat would see. Each seat is sent the bot's moves as well as the result, for `KUB-17`'s
-playback; the result is stored before they are sent.
+Built in `KUB-36`, 23 Nov 2026. Before the deal the first seat can give the next empty seat to
+a bot (`{type:'add-bot', level, name}`), easy, medium or hard, playing as the first of that
+level's characters not already at the table, as in the bot game. A bot takes a seat as a friend
+sitting down would, so a friend who comes after it sits after it; the table keeps
+`bots: [{seat, level}]`, and a bot's seat has no token, so no device can speak for it. One
+friend and bots is a table too, though the bot game on the device is the better way to play it.
+
+Whenever the turn may have passed (a deal, an ended turn, a draw, a draw for an away seat), the
+object plays every bot whose turn it now is, in the same event: core's `botTurn` runs
+`takeBotTurn`, the same call the bot game makes on the device, so the bot is handed its seat's
+`seatView` and nothing more (invariant 2), and what it proposes goes through the engine like
+any player's turn. Each turn is stored, then every seat is sent `bot-turn` with its moves
+(empty when it drew), then `drew` if it drew, then its view. The turn therefore only ever rests
+with a person, and a bot is never away: it is not asked about, nor asked to vote, when a person
+is away on their turn.
+
+The page plays a bot's turn back from those moves: it never saw the bot's rack, so it takes the
+tiles the bot played from the table in the view that follows, and replays the moves over the
+table the turn began with through core's `move`. Bots that play one after another are shown one
+after another, after the turn that passed to them, rather than each replacing the last.
+
+`apps/game/test/worker.test.ts` plays two friends and two bots to the end through the host in
+workerd; `packages/core/src/table.test.ts` plays twenty such games and checks every bot was
+handed exactly its seat view and no tile of another rack or the pool; `e2e/bots.spec.ts`
+plays one through two browsers.
 
 ## Invites
 
@@ -266,9 +287,11 @@ Filed from `KUB-12`, in order:
    `e2e/friends.spec.ts` (`pnpm e2e`, in `verify`) plays a whole game with three browsers
    through `wrangler dev` and reads every frame each was sent. `bot-turn` is parsed and not
    yet played back: no host sends it until `KUB-36`, whose playback can take each played
-   tile from the table in the view that follows, since a bot's moves name tiles by id.
+   tile from the table in the view that follows, since a bot's moves name tiles by id. It
+   does, since `KUB-36`.
 4. `KUB-35` Who is here, and coming back to your seat. Built: see "Who is here", above.
-5. `KUB-36` Bots in the empty seats of a friends' table.
+5. `KUB-36` Bots in the empty seats of a friends' table. Built: see "Bots at a friends' table",
+   above.
 6. `KUB-37` A player who is away does not stall the table (Nora's choice). Built: see "A
    player who is away on their turn", above.
 7. `KUB-38` Finished online games kept for signed-in seats, after `KUB-29`, for `KUB-13`.

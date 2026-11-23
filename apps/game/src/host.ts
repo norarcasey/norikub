@@ -13,7 +13,15 @@ import {
   type JoinResponse,
   type TableMessage,
 } from '../../../packages/core/src/protocol.ts';
-import { apply, cancel, deal, tableViewFor, type Drew } from '../../../packages/core/src/table.ts';
+import {
+  addBot,
+  apply,
+  botTurn,
+  cancel,
+  deal,
+  tableViewFor,
+  type Drew,
+} from '../../../packages/core/src/table.ts';
 import { isStale, presence, SWEEP_EVERY_MS, type OpenSeat } from './presence.ts';
 import { joinRoom, readRoom, seatOf, type Room } from './room.ts';
 
@@ -48,6 +56,10 @@ const attachmentSchema = z.object({
  * `settle`, which hands the core who is here and the time (`settleAway`); the core decides
  * when the others are asked to draw for it and when they have all agreed. The sweep is what
  * notices the minute has passed, so the question opens within 15 s of it.
+ *
+ * Bots in the empty seats (`KUB-36`): whenever the turn may have passed (a deal, an ended turn,
+ * a draw, a draw for an away seat), `playBots` plays every bot whose turn it now is, in the same
+ * event, each turn stored before every seat is told its moves and sent its view.
  */
 export class Table extends DurableObject<object> {
   // The object reads nothing of the Worker's environment yet: keeping finished games
@@ -103,7 +115,8 @@ export class Table extends DurableObject<object> {
   private async openSocket(token: string | null): Promise<Response> {
     const [client, server] = Object.values(new WebSocketPair());
     if (client === undefined || server === undefined) throw new Error('WebSocketPair gave no pair');
-    const room = this.load();
+    // A bot's turn left unplayed (an event that failed part-way) is played before anyone sits back.
+    const room = this.playBots(this.load());
     const seat = seatOf(room, token);
     if (seat === null) {
       server.accept();
@@ -139,7 +152,18 @@ export class Table extends DurableObject<object> {
       if (!dealt.ok) return send(ws, { type: 'refused', refusal: dealt.refusal });
       const saved = { ...room, table: dealt.value };
       this.save(saved);
-      return this.broadcast(saved);
+      this.broadcast(saved);
+      // A bot may be dealt the first turn, and a seat that is away may come to have it.
+      return this.settle(this.playBots(saved), null);
+    }
+    if (m.type === 'add-bot') {
+      const added = addBot(room.table, seat, m.level, m.name);
+      if (!added.ok) return send(ws, { type: 'refused', refusal: added.refusal });
+      const saved = { ...room, table: added.value };
+      this.save(saved);
+      this.broadcast(saved);
+      // Presence has one seat more, a bot's, which no device will ever hold.
+      return this.settle(saved, null);
     }
     if (m.type === 'cancel') {
       const cancelled = cancel(room.table, seat);
@@ -173,8 +197,9 @@ export class Table extends DurableObject<object> {
     this.save(saved);
     if (applied.value.drew === null) this.broadcast(saved);
     else this.tellDraw(saved, applied.value.drew);
-    // The turn may have passed to a seat that is away, whose minute starts now.
-    this.settle(saved, null);
+    // The turn may have passed to a bot, or past the bots to a seat that is away, whose minute
+    // starts now.
+    this.settle(this.playBots(saved), null);
   }
 
   override webSocketClose(ws: WebSocket): void {
@@ -234,12 +259,39 @@ export class Table extends DurableObject<object> {
       saved = { ...room, table: settled.table, stall: settled.stall };
       this.save(saved);
     }
-    if (settled.drew !== null) this.tellDraw(saved, settled.drew, except);
+    if (settled.drew !== null) {
+      this.tellDraw(saved, settled.drew, except);
+      // The draw passed the turn on, perhaps to a bot; once they have played, settle again for
+      // whoever has it then. That one's minute starts now, so it draws nothing more.
+      const played = this.playBots(saved, except);
+      if (played !== saved) return this.settle(played, except);
+    }
     const offer = awayOffer(saved.stall, here, now);
     for (const { ws } of this.open(except)) {
       send(ws, { type: 'presence', here });
       send(ws, { type: 'away-turn', offer });
     }
+  }
+
+  /**
+   * Every bot whose turn it is plays, one after another, until the turn reaches a person or the
+   * game ends. Each turn is stored, then every seat is sent the bot's moves for the playback,
+   * then where it drew from if it drew, then its own view. A table has at most three bots and
+   * seat 0 is always a person, so this is at most one round; the bound only guards that.
+   */
+  private playBots(room: Room, except: WebSocket | null = null): Room {
+    let saved = room;
+    for (let turns = 0; turns < saved.table.names.length; turns++) {
+      const played = botTurn(saved.table);
+      if (played === null) break;
+      saved = { ...saved, table: played.table };
+      this.save(saved);
+      const told: TableMessage = { type: 'bot-turn', seat: played.seat, moves: played.moves };
+      for (const open of this.open(except)) send(open.ws, told);
+      if (played.drew === null) this.broadcast(saved, except);
+      else this.tellDraw(saved, played.drew, except);
+    }
+    return saved;
   }
 
   /** A draw's place in the pool to every seat, so each page's pile loses the same tile; then views. */

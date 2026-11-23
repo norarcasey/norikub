@@ -1,14 +1,17 @@
 import type { AwayOffer } from '@norikub/core/away';
+import type { Level } from '@norikub/core/bot';
 import type { TableClientMessage, TableMessage } from '@norikub/core/protocol';
 import { summarizeTurn } from '@norikub/core/summary';
 import type { Refusal, TableView } from '@norikub/core/table';
 import { rackPenalty } from '@norikub/core/tiles';
 import type { Tile } from '@norikub/core/tiles';
+import { move } from '@norikub/core/turn';
 import type { Move, MoveRefusal } from '@norikub/core/turn';
 import { moveInView } from '@norikub/core/view';
 import type { TurnView } from '@norikub/core/view';
 
 import type { Board } from '../table/board.ts';
+import { botName, faceOf } from '../table/cast.ts';
 import type { DropTarget } from '../table/drag.ts';
 import { dealPile, fitPile, takeFromPile } from '../table/pile.ts';
 import type { Pile } from '../table/pile.ts';
@@ -54,6 +57,14 @@ export type Friends = {
    * to draw for it, and who has agreed (`KUB-37`); null when no turn is held up.
    */
   readonly awayTurn: AwayOffer | null;
+  /** A bot's moves the host announced (`KUB-36`), waiting for the view of the same turn. */
+  readonly bot: { readonly seat: number; readonly moves: readonly Move[] } | null;
+  /**
+   * What the turns since the last one that passed the turn have added to the playback and the
+   * notes, so the bots that play one after another in a single event are each shown, in order,
+   * rather than each replacing the one before. Null while a turn is being played.
+   */
+  readonly chain: { readonly replay: readonly Frame[]; readonly notes: readonly Note[] } | null;
 };
 
 /** `rows` is the rack as this device last laid it out, kept under the table's code. */
@@ -70,12 +81,14 @@ export function newFriends(rows: { rows: RackRows; startRows: RackRows } | null 
     drew: null,
     here: null,
     awayTurn: null,
+    bot: null,
+    chain: null,
   };
 }
 
 /** A socket opened again starts with nothing unanswered: what was sent on the old one is gone. */
 export function reconnected(state: Friends): Friends {
-  return { ...state, ahead: null, unanswered: 0, drew: null };
+  return { ...state, ahead: null, unanswered: 0, drew: null, bot: null, chain: null };
 }
 
 /** The view on screen: the mover's own, while it is ahead of the host's, or the host's. */
@@ -98,9 +111,8 @@ export function received(state: Friends, message: TableMessage): Friends {
       return { ...state, here: message.here };
     case 'away-turn':
       return { ...state, awayTurn: message.offer };
-    // Bots at a friends' table are KUB-36; no host sends their moves yet.
     case 'bot-turn':
-      return state;
+      return { ...state, bot: { seat: message.seat, moves: message.moves } };
   }
 }
 
@@ -120,7 +132,9 @@ function refusalNotes(refusal: Refusal): Note[] {
 function viewed(state: Friends, table: TableView): Friends {
   const was = state.host?.phase === 'playing' ? state.host.view : null;
   const answered = { ...answer(state), host: table };
-  if (table.phase !== 'playing') return { ...answered, ahead: null, drew: null, replay: [] };
+  if (table.phase !== 'playing') {
+    return { ...answered, ahead: null, drew: null, replay: [], bot: null, chain: null };
+  }
   const view = table.view;
   const shown = answered.ahead ?? view;
 
@@ -133,8 +147,12 @@ function viewed(state: Friends, table: TableView): Friends {
 
   const notes: Note[] = [];
   let replay: readonly Frame[] = [];
+  let turnOver = false;
   if (was !== null && !dealt) {
-    const turnOver = was.current !== view.current || view.status.kind !== was.status.kind;
+    turnOver = was.current !== view.current || view.status.kind !== was.status.kind;
+    if (state.bot !== null && state.bot.moves.length > 0 && state.drew === null) {
+      replay = botFrames(was, view, table.names, state.bot, pile);
+    }
     if (state.drew !== null) {
       replay = drawFrames(was, view, table.names, state.drew, pile);
       if (state.drew.drewAt !== null) pile = takeFromPile(pile, state.drew.drewAt);
@@ -153,6 +171,15 @@ function viewed(state: Friends, table: TableView): Friends {
 
   rows = reconcileRows(rows, shown.rack, startRows);
   if (view.current === view.seat && view.turn === null) startRows = rows;
+
+  // A bot's turn follows the one before it in the same event: its frames and note go after
+  // theirs, so a person who ended their turn sees each bot that played after them.
+  const fromBot = state.bot !== null && !dealt;
+  if (fromBot && state.chain !== null) {
+    replay = [...state.chain.replay, ...replay];
+    notes.unshift(...state.chain.notes);
+  }
+  const passed = dealt || turnOver;
   return {
     ...answered,
     rows,
@@ -161,7 +188,61 @@ function viewed(state: Friends, table: TableView): Friends {
     notes: answered.unanswered > 0 ? state.notes : notes,
     replay: replay.length > 0 ? replay : state.drew === null ? state.replay : [],
     drew: null,
+    bot: null,
+    chain: passed ? { replay, notes } : null,
   };
+}
+
+/**
+ * The frames of a bot's play, from the views before and after it and the moves the host sent
+ * (`KUB-36`), as the bot game's `framesOf` makes them from two games. This seat never saw the
+ * bot's rack, so the tiles it played are taken from the table it ended on: each move names
+ * its tile by id, and the engine's `move` replays them in the bot's order over the table the
+ * turn began with. The screen judges nothing (invariant 1): a move that will not replay ends
+ * the playback early at the table the host accepted.
+ */
+function botFrames(
+  was: TurnView,
+  now: TurnView,
+  names: readonly string[],
+  bot: { readonly seat: number; readonly moves: readonly Move[] },
+  pile: Pile,
+): Frame[] {
+  const name = names[bot.seat] ?? '';
+  const began = was.turn?.began ?? was.table;
+  const there = new Set(began.flat().map((tile) => tile.id));
+  const played = now.table.flat().filter((tile) => !there.has(tile.id));
+  const summary = summarizeTurn(began, now.table);
+  const before = countsOf(was, was.rack.length);
+  const frames: Frame[] = [];
+  let rack: readonly Tile[] = played;
+  let table: readonly (readonly Tile[])[] = began;
+  for (const m of bot.moves) {
+    const tile = [...rack, ...table.flat()].find((t) => t.id === m.tileId);
+    const moved = move({ start: { table: began }, rack, table }, m);
+    if (!moved.ok || tile === undefined) break;
+    rack = moved.turn.rack;
+    table = moved.turn.table;
+    const counts = [...before];
+    counts[bot.seat] = (before[bot.seat] ?? 0) - (played.length - rack.length);
+    frames.push({
+      seat: bot.seat,
+      name,
+      table,
+      counts,
+      pile,
+      step: { kind: 'placed', tile, summary },
+    });
+  }
+  frames.push({
+    seat: bot.seat,
+    name,
+    table: now.table,
+    counts: countsOf(now, now.rack.length),
+    pile,
+    step: { kind: 'done', summary },
+  });
+  return frames;
 }
 
 /** The tile this seat drew: the one in its rack now that was nowhere in its sight before. */
@@ -401,11 +482,34 @@ export function friendsBoard(state: Friends): Board | null {
     round: state.notes.filter((note): note is Played => note.kind === 'played'),
     replay: state.replay,
     away: counts.map((_, seat) => isAway(state, seat)),
-    faces: counts.map(() => null),
+    faces: counts.map((_, seat) => {
+      const level = botLevel(state, seat);
+      return level === null ? null : faceOf(level, host.names[seat] ?? '');
+    }),
   };
 }
 
-/** A seat the host has said has no device connected. Before it has said, nobody is away. */
+/**
+ * A seat the host has said has no device connected. Before it has said, nobody is away. A bot
+ * has no device and is never away: the host plays it as soon as its turn comes.
+ */
 export function isAway(state: Friends, seat: number): boolean {
-  return state.here?.[seat] === false;
+  return state.here?.[seat] === false && botLevel(state, seat) === null;
+}
+
+/** The level of the bot in `seat`, or null when a person sits there. */
+export function botLevel(state: Friends, seat: number): Level | null {
+  return state.host?.bots.find((bot) => bot.seat === seat)?.level ?? null;
+}
+
+/**
+ * The first seat gives the next empty seat to a bot (`KUB-36`), playing as the first of its
+ * level's characters not already at the table. Nothing is shown ahead of the host.
+ */
+export function sendAddBot(state: Friends, level: Level): Sent {
+  const name = botName(level, state.host?.names ?? []);
+  return {
+    state: { ...state, unanswered: state.unanswered + 1, notes: [] },
+    send: [{ type: 'add-bot', level, name }],
+  };
 }

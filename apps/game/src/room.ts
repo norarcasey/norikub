@@ -15,7 +15,8 @@ import { newTable, sitDown, tableSchema, type Outcome } from '../../../packages/
  */
 const roomSchema = z.object({
   table: tableSchema,
-  tokens: z.array(z.string().min(1)),
+  /** By seat; null for a bot's seat, which no device holds (`KUB-36`). */
+  tokens: z.array(z.string().min(1).nullable()),
   /**
    * The turn held up by a seat that is away, and who has agreed to draw for it (`KUB-37`,
    * `away.ts`). A room stored before it was added has none, which is what it would have been.
@@ -49,7 +50,8 @@ export function joinRoom(
 ): Outcome<{ room: Room; seat: number }> {
   const sat = sitDown(room.table, name);
   if (!sat.ok) return sat;
-  const tokens = [...room.tokens];
+  // Filled out to the seat, so a bot's seat before it is a null, never a hole.
+  const tokens = sat.value.table.names.map((_, seat) => room.tokens[seat] ?? null);
   tokens[sat.value.seat] = token;
   return {
     ok: true,

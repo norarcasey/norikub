@@ -20,7 +20,7 @@ function playing(): Extract<Table, { phase: 'playing' }> {
     ],
     [['blue-1-a', 'blue-2-a', 'blue-3-a']],
   );
-  return { phase: 'playing', names: ['Ana', 'Bo', 'Cy'], game, working: null };
+  return { phase: 'playing', names: ['Ana', 'Bo', 'Cy'], bots: [], game, working: null };
 }
 
 const ALL_HERE = [true, true, true];
@@ -82,7 +82,7 @@ describe('a seat away on its turn', () => {
     expect(voteAway(table, stall, ANA_AWAY, MIN - 1, 1, true)).toEqual(noTurn);
     expect(voteAway(table, stall, ANA_AWAY, MIN, 0, true)).toEqual(noTurn);
     expect(voteAway(table, null, ALL_HERE, MIN, 1, true)).toEqual(noTurn);
-    const cancelled: Table = { phase: 'cancelled', names: table.names, by: 1 };
+    const cancelled: Table = { phase: 'cancelled', names: table.names, bots: [], by: 1 };
     expect(voteAway(cancelled, stall, ANA_AWAY, MIN, 1, true)).toEqual({
       ok: false,
       refusal: { kind: 'table', refusal: { kind: 'cancelled' } },
@@ -141,5 +141,13 @@ describe('a seat away on its turn', () => {
     const stall = stallAt(empty, null, ANA_AWAY, 0);
     const voted = vote(empty, vote(empty, stall, ANA_AWAY, MIN, 1).stall, ANA_AWAY, MIN, 2);
     expect(voted.drew).toEqual({ seat: 0, drewAt: null });
+  });
+});
+
+describe('a bot’s seat', () => {
+  it('is never held up as away, though no device holds it', () => {
+    const table = { ...playing(), bots: [{ seat: 0, level: 'medium' as const }] };
+    expect(settleAway(table, null, ANA_AWAY, 0).stall).toBeNull();
+    expect(settleAway(table, null, ANA_AWAY, 10 * MIN)).toEqual({ table, stall: null, drew: null });
   });
 });

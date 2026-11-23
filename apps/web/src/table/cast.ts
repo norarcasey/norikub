@@ -49,3 +49,18 @@ export const ROSTER: Readonly<Record<Level, readonly [Who, Who, Who]>> = {
 export function levelOf(who: Who): Level {
   return LEVELS.find((level) => ROSTER[level].includes(who)) ?? 'medium';
 }
+
+/**
+ * Who a bot at a friends' table plays as (`KUB-36`): the first of its level's characters whose
+ * name is not already at the table, so two bots are told apart as they are in the bot game.
+ * The table holds only the name and the level, so the face is found again from them.
+ */
+export function botName(level: Level, names: readonly string[]): string {
+  const who = ROSTER[level].find((w) => !names.includes(CAST_NAMES[w])) ?? ROSTER[level][0];
+  return CAST_NAMES[who];
+}
+
+/** The face of a bot of `level` named `name`, or null for a name not in its level's roster. */
+export function faceOf(level: Level, name: string): Who | null {
+  return ROSTER[level].find((w) => CAST_NAMES[w] === name) ?? null;
+}

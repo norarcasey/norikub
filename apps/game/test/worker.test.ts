@@ -326,7 +326,7 @@ describe('a table played over two sockets', () => {
     if (nora === undefined || kit === undefined) throw new Error('two seats');
     await nora.until((s) => s.views().length > 0);
     await kit.until((s) => s.views().length > 0);
-    expect(nora.lastView()).toEqual({ phase: 'seating', you: 0, names: ['Nora', 'Kit'] });
+    expect(nora.lastView()).toEqual({ phase: 'seating', you: 0, names: ['Nora', 'Kit'], bots: [] });
 
     // Only the first seat deals; Kit's try is refused to Kit alone.
     const noraBefore = nora.frames.length;
@@ -432,6 +432,79 @@ describe('a table played over two sockets', () => {
   }, 20_000);
 });
 
+describe('bots at a friends’ table', () => {
+  /**
+   * The ticket's done-when, through the host as deployed: two friends and two bots play to the
+   * end. The friends only ever draw, so every tile laid on the table is a bot's, played by the
+   * host in the same event as the turn before it and told to each seat as moves, then a view.
+   */
+  it('seats two bots for the first seat and plays them to the end of a game', async () => {
+    const code = freshCode();
+    const seats = [await seatAt(code, 'Nora'), await seatAt(code, 'Kit')];
+    const [nora, kit] = seats.map((s) => new Seat(code, s.token));
+    if (nora === undefined || kit === undefined) throw new Error('two seats');
+    await nora.until((s) => s.views().length > 0);
+
+    // Only the first seat adds a bot, and it takes the next seat.
+    await kit.send({ type: 'add-bot', level: 'easy', name: 'Tatum' });
+    await kit.until((s) => s.messages().some((m) => m.type === 'refused'));
+    await nora.send({ type: 'add-bot', level: 'medium', name: 'Erik' });
+    await nora.send({ type: 'add-bot', level: 'hard', name: 'Michael' });
+    await kit.until((s) => s.lastView().names.length === 4);
+    expect(kit.lastView()).toEqual({
+      phase: 'seating',
+      you: 1,
+      names: ['Nora', 'Kit', 'Erik', 'Michael'],
+      bots: [
+        { seat: 2, level: 'medium' },
+        { seat: 3, level: 'hard' },
+      ],
+    });
+
+    await nora.send({ type: 'deal' });
+    await nora.until((s) => s.lastView().phase === 'playing');
+    const bySeat = [nora, kit];
+    // The turn rests only with a friend or on a finished game: a bot's turn is never left open.
+    const settled = (s: Seat) => {
+      const v = s.playing();
+      return v.status.kind === 'over' || v.current < 2;
+    };
+    for (let turn = 0; turn < 400; turn++) {
+      await nora.until(settled);
+      const view = nora.playing();
+      if (view.status.kind === 'over') break;
+      const mover = bySeat[view.current];
+      if (mover === undefined) throw new Error(`seat ${view.current} is a bot's`);
+      const before = nora.frames.length;
+      await mover.send({ type: 'draw', pick: null });
+      await nora.until((s) => s.frames.length > before && settled(s));
+    }
+    await kit.until((s) => s.playing().status.kind === 'over');
+    expect(nora.playing().status.kind).toBe('over');
+
+    const botTurns = nora.messages().flatMap((m) => (m.type === 'bot-turn' ? [m] : []));
+    expect(new Set(botTurns.map((m) => m.seat))).toEqual(new Set([2, 3]));
+    // Each bot turn is followed by its own view; one that played named the tiles it laid down.
+    const played = botTurns.filter((m) => m.moves.length > 0);
+    expect(played.length).toBeGreaterThan(0);
+    const laid = new Set(
+      nora
+        .views()
+        .flatMap((v) => (v.phase === 'playing' ? v.view.table.flat() : []))
+        .map((t) => t.id),
+    );
+    for (const m of played) for (const move of m.moves) expect(laid.has(move.tileId)).toBe(true);
+    // Nobody was ever asked to draw for a bot: it has no device, and is never away.
+    const asked = nora
+      .messages()
+      .flatMap((m) => (m.type === 'away-turn' && m.offer !== null ? [m.offer.seat] : []));
+    expect(asked.filter((seat) => seat >= 2)).toEqual([]);
+
+    nora.close();
+    kit.close();
+  }, 30_000);
+});
+
 describe('a cancelled table', () => {
   it('is cancelled by any seat for everyone, stays so, and seats nobody after', async () => {
     const code = freshCode();
@@ -443,7 +516,7 @@ describe('a cancelled table', () => {
 
     // Kit, who does not deal, calls it off mid-game; both seats are told who did.
     await kit.send({ type: 'cancel' });
-    const told = { phase: 'cancelled', names: ['Nora', 'Kit'], by: 1 };
+    const told = { phase: 'cancelled', names: ['Nora', 'Kit'], bots: [], by: 1 };
     await nora.until((s) => s.views().at(-1)?.phase === 'cancelled');
     await kit.until((s) => s.views().at(-1)?.phase === 'cancelled');
     expect(nora.lastView()).toEqual({ ...told, you: 0 });

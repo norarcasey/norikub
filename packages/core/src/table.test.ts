@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import { proposeTurn } from './bot.ts';
+import { botFor, proposeTurn } from './bot.ts';
+import type { Bot, Level } from './bot.ts';
+import type { SeatView } from './game.ts';
 import { layout, ts } from './fixtures.test-helpers.ts';
 import { finish, seatView } from './game.ts';
 import { parse } from './parse.ts';
 import { seededRandom } from './random.ts';
 import {
+  addBot,
   apply,
+  botAt,
+  botTurn,
   cancel,
   deal,
   newTable,
@@ -45,7 +50,13 @@ function playing(table: Table): Extract<Table, { phase: 'playing' }> {
 /** A table laid out by hand: seat 0 to play, nothing moved yet. */
 function laidOut(...args: Parameters<typeof layout>): Extract<Table, { phase: 'playing' }> {
   const game = layout(...args);
-  return { phase: 'playing', names: game.players.map((p) => p.name), game, working: null };
+  return {
+    phase: 'playing',
+    names: game.players.map((p) => p.name),
+    bots: [],
+    game,
+    working: null,
+  };
 }
 
 /** Every tile id anywhere in a value, however deep: what a page could read off a message. */
@@ -139,6 +150,7 @@ describe('cancelling', () => {
     expect(cancelled(seated('Nora', 'Ana'), 1)).toEqual({
       phase: 'cancelled',
       names: ['Nora', 'Ana'],
+      bots: [],
       by: 1,
     });
     const table = dealt(5, 'Nora', 'Ana', 'Bo');
@@ -158,7 +170,7 @@ describe('cancelling', () => {
   it('shows every seat who called it off, and no tile', () => {
     const table = cancelled(dealt(5, 'Nora', 'Ana'), 1);
     const view = tableViewFor(table, 0);
-    expect(view).toEqual({ phase: 'cancelled', you: 0, names: ['Nora', 'Ana'], by: 1 });
+    expect(view).toEqual({ phase: 'cancelled', you: 0, names: ['Nora', 'Ana'], bots: [], by: 1 });
     expect(idsIn(view).size).toBe(0);
   });
 });
@@ -278,6 +290,7 @@ describe('what each seat is sent', () => {
       phase: 'seating',
       you: 1,
       names: ['Nora', 'Ana'],
+      bots: [],
     });
   });
 
@@ -373,4 +386,155 @@ describe('what each seat is sent', () => {
     expect(midTurn).toBeGreaterThan(3_000);
     expect(draws).toBeGreaterThan(800);
   }, 20_000);
+});
+
+describe('bots in the empty seats', () => {
+  function withBot(table: Table, level: Level, name: string): Table {
+    const added = addBot(table, 0, level, name);
+    if (!added.ok) throw new Error(JSON.stringify(added.refusal));
+    return added.value;
+  }
+
+  it('are added by the first seat before the deal, into the next seat', () => {
+    const table = withBot(withBot(seated('Nora', 'Ana'), 'hard', 'Michael'), 'easy', 'Tatum');
+    expect(table.names).toEqual(['Nora', 'Ana', 'Michael', 'Tatum']);
+    expect(table.bots).toEqual([
+      { seat: 2, level: 'hard' },
+      { seat: 3, level: 'easy' },
+    ]);
+    expect(botAt(table, 2)).toBe('hard');
+    expect(botAt(table, 1)).toBeNull();
+    const refusal = (kind: string) => ({
+      ok: false,
+      refusal: { kind: 'table', refusal: { kind } },
+    });
+    expect(addBot(table, 0, 'easy', 'Edward')).toEqual(refusal('table-full'));
+    expect(addBot(seated('Nora', 'Ana'), 1, 'easy', 'Edward')).toEqual(
+      refusal('only-the-first-seat-adds-bots'),
+    );
+    expect(addBot(dealt(1, 'Nora', 'Ana'), 0, 'easy', 'Edward')).toEqual(refusal('already-dealt'));
+    const off = cancel(table, 1);
+    if (!off.ok) throw new Error('not cancelled');
+    expect(off.value.bots).toEqual(table.bots);
+    expect(addBot(off.value, 0, 'easy', 'Edward')).toEqual(refusal('cancelled'));
+  });
+
+  it('let one friend deal against bots alone, and come with the table to every deal', () => {
+    const table = withBot(seated('Nora'), 'medium', 'Erik');
+    const first = deal(table, 0, 3);
+    if (!first.ok) throw new Error('not dealt');
+    expect(first.value.bots).toEqual([{ seat: 1, level: 'medium' }]);
+    expect(tableViewFor(first.value, 0)).toMatchObject({ bots: [{ seat: 1, level: 'medium' }] });
+  });
+
+  it('play only on a bot’s turn, through the engine, with the level it was given', () => {
+    // Laid out by hand: a bot in seat 1 to play, with a first meld in its rack.
+    const game = layout(
+      [
+        { rack: ['red-1-a'] },
+        { rack: ['black-10-a', 'black-11-a', 'black-12-a', 'orange-1-a'] },
+        { rack: ['blue-4-a'] },
+      ],
+      [],
+    );
+    const atBot: Table = {
+      phase: 'playing',
+      names: ['Nora', 'Erik', 'Ana'],
+      bots: [{ seat: 1, level: 'medium' }],
+      game: { ...game, current: 1 },
+      working: null,
+    };
+    const levels: Level[] = [];
+    const played = botTurn(atBot, (level) => {
+      levels.push(level);
+      return botFor(level);
+    });
+    expect(levels).toEqual(['medium']);
+    expect(played?.seat).toBe(1);
+    expect(played?.drew).toBeNull();
+    expect(played?.moves.map((m) => m.tileId)).toEqual(['black-10-a', 'black-11-a', 'black-12-a']);
+    if (played?.table.phase !== 'playing') throw new Error('not playing');
+    expect(played.table.game.current).toBe(2);
+    expect(played.table.game.table).toEqual([ts('black-10-a', 'black-11-a', 'black-12-a')]);
+    // Nobody's turn but a person's is a bot's to take.
+    expect(botTurn(played.table)).toBeNull();
+    expect(botTurn(seated('Nora', 'Ana'))).toBeNull();
+  });
+
+  it('draw the pool’s last tile, or pass on an empty pool, when they cannot play', () => {
+    const game = layout([{ rack: ['red-1-a'] }, { rack: ['blue-4-a'] }], []);
+    const base: Table = {
+      phase: 'playing',
+      names: ['Nora', 'Erik'],
+      bots: [{ seat: 1, level: 'easy' }],
+      game: { ...game, current: 1 },
+      working: null,
+    };
+    expect(botTurn(base)).toMatchObject({
+      moves: [],
+      drew: { seat: 1, drewAt: game.pool.length - 1 },
+    });
+    const empty: Table = { ...base, game: { ...game, current: 1, pool: [] } };
+    expect(botTurn(empty)).toMatchObject({ moves: [], drew: { seat: 1, drewAt: null } });
+    // A bot whose proposal the engine refuses draws instead, and its moves are not sent.
+    const wrong: Bot = () => ({
+      kind: 'play',
+      moves: [{ kind: 'to-new-set', tileId: 'blue-4-a' }],
+    });
+    expect(botTurn(base, () => wrong)).toMatchObject({ moves: [], drew: { seat: 1 } });
+  });
+
+  /**
+   * The ticket's done-when: a table of two friends and two bots played to the end, the friends
+   * by the bot's own turns sent as a page sends them, and every bot handed exactly its seat's
+   * view and never a tile of another rack or of the pool (invariant 2).
+   */
+  it('play a two-friend, two-bot table to the end, handed only their seat’s view', () => {
+    let finished = 0;
+    let botTurns = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      let table = withBot(withBot(seated('Nora', 'Ana'), 'medium', 'Erik'), 'hard', 'Michael');
+      const dealtTable = deal(table, 0, seed);
+      if (!dealtTable.ok) throw new Error('not dealt');
+      table = dealtTable.value;
+      for (let step = 0; step < 2_000; step++) {
+        if (table.phase !== 'playing' || table.game.status.kind !== 'playing') break;
+        const game = table.game;
+        const seat = game.current;
+        const level = botAt(table, seat);
+        if (level !== null) {
+          const handed: SeatView[] = [];
+          const played = botTurn(table, (l) => (view) => {
+            handed.push(view);
+            return botFor(l)(view);
+          });
+          if (played === null) throw new Error('a bot’s turn was not played');
+          expect(handed).toEqual([seatView(game, seat)]);
+          const seen = idsIn(handed);
+          const hidden = [
+            ...game.pool,
+            ...game.players.flatMap((p, s) => (s === seat ? [] : p.rack)),
+          ];
+          expect(hidden.filter((tile) => seen.has(tile.id))).toEqual([]);
+          table = played.table;
+          botTurns++;
+          continue;
+        }
+        const proposal = proposeTurn(seatView(game, seat));
+        const messages: TurnMessage[] =
+          proposal.kind === 'draw'
+            ? [{ type: 'draw', pick: null }]
+            : [
+                ...proposal.moves.map((m): TurnMessage => ({ type: 'move', move: m })),
+                { type: 'end-turn' },
+              ];
+        for (const m of messages) table = ok(apply(table, seat, m)).table;
+      }
+      if (table.phase === 'playing' && table.game.status.kind === 'over') finished++;
+    }
+    expect(finished).toBe(20);
+    // About half of the 366 bot turns these 20 seeds gave on 23 Nov 2026, so a change that stopped
+    // the bots playing fails here instead of passing.
+    expect(botTurns).toBeGreaterThan(180);
+  });
 });

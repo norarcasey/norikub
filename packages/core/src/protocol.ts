@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { awayOfferSchema } from './away.ts';
+import { levelSchema } from './bot.ts';
 import { displayNameSchema, refusalSchema, tableViewSchema, turnMessageSchema } from './table.ts';
 import { moveSchema } from './turn.ts';
 
@@ -37,7 +38,8 @@ export const SITE_REFUSED = 'site';
 
 /**
  * What a seat sends over its socket: `deal`, the first seat's once two or more are seated,
- * `cancel`, any seat's, which calls the table off for everyone (`KUB-52`), and the four
+ * `cancel`, any seat's, which calls the table off for everyone (`KUB-52`), `add-bot`, the first
+ * seat's before the deal (`KUB-36`), and the four
  * messages of a turn being played (`apply` in `table.ts`), from the seat whose turn it is.
  * `draw-for-away` is a seat's answer to "Draw a tile for <name>?" (`KUB-37`, `away.ts`): yes,
  * or no to take back a yes.
@@ -45,6 +47,11 @@ export const SITE_REFUSED = 'site';
 export const tableClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('deal') }).readonly(),
   z.object({ type: z.literal('cancel') }).readonly(),
+  /**
+   * The first seat gives the next empty seat to a bot before the deal (`KUB-36`): how hard it
+   * plays, and the name of the character it plays as, which the page picks from its cast.
+   */
+  z.object({ type: z.literal('add-bot'), level: levelSchema, name: displayNameSchema }).readonly(),
   z.object({ type: z.literal('draw-for-away'), yes: z.boolean() }).readonly(),
   ...turnMessageSchema.options,
 ]);
@@ -66,7 +73,11 @@ export const tableMessageSchema = z.discriminatedUnion('type', [
       drewAt: z.number().int().min(0).nullable(),
     })
     .readonly(),
-  /** A bot's moves, sent beside the result for the playback (`KUB-17`); empty when it drew. */
+  /**
+   * A bot's moves, sent beside the result for the playback (`KUB-17`); empty when it drew.
+   * Sent before the `drew` and the view of the same turn, so a page knows the view it is about
+   * to get is a bot's turn and plays it back (`KUB-36`).
+   */
   z
     .object({
       type: z.literal('bot-turn'),

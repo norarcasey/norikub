@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { drawInstead, startTurn } from './turn.ts';
+import { botAt } from './table.ts';
 import type { Applied, Outcome, Table } from './table.ts';
 
 /**
@@ -56,7 +57,8 @@ export type Here = readonly boolean[];
 function reckon(table: Table, stall: Stall | null, here: Here, now: number): Stall | null {
   if (table.phase !== 'playing' || table.game.status.kind !== 'playing') return null;
   const seat = table.game.current;
-  if (here[seat] === true) return null;
+  // A bot has no device and is never away: the host plays its turn as soon as it comes (`KUB-36`).
+  if (here[seat] === true || botAt(table, seat) !== null) return null;
   if (stall !== null && stall.seat === seat) return stall;
   return { seat, since: now, yes: [] };
 }

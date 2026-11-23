@@ -203,3 +203,11 @@
   outline: 2px solid #ffd54a;
   outline-offset: 2px;
 }
+
+.add-bot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}

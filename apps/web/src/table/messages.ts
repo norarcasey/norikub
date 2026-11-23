@@ -95,6 +95,8 @@ export function tableRefusalText(refusal: TableRefusal): string {
       return 'Wait for at least one more player to sit down.';
     case 'only-the-first-seat-deals':
       return 'The first player to sit down deals.';
+    case 'only-the-first-seat-adds-bots':
+      return 'The first player to sit down adds the bots.';
     case 'no-such-seat':
       return 'You have no seat at this table.';
     case 'not-your-turn':

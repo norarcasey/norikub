@@ -5,7 +5,9 @@ import type { Stall } from '../../../../packages/core/src/away.ts';
 import { layout, ts } from '../../../../packages/core/src/fixtures.test-helpers.ts';
 import type { TableClientMessage, TableMessage } from '../../../../packages/core/src/protocol.ts';
 import {
+  addBot,
   apply,
+  botTurn,
   cancel,
   deal,
   newTable,
@@ -17,9 +19,11 @@ import { noteText } from '../table/messages.ts';
 import {
   awayQuestion,
   friendsBoard,
+  isAway,
   newFriends,
   placeTile,
   received,
+  sendAddBot,
   sendAwayVote,
   sendCancel,
   sendDeal,
@@ -53,7 +57,10 @@ class Host {
   settle(): void {
     const settled = settleAway(this.table, this.stall, this.here, this.now);
     this.stall = settled.stall;
-    if (settled.drew !== null) this.tellDraw(settled.table, settled.drew);
+    if (settled.drew !== null) {
+      this.tellDraw(settled.table, settled.drew);
+      this.playBots();
+    }
     const offer = voteAwayOffer(this);
     for (const box of this.inbox) {
       box.push({ type: 'presence', here: [...this.here] });
@@ -83,6 +90,14 @@ class Host {
       if (!dealt.ok)
         return void this.inbox[seat]?.push({ type: 'refused', refusal: dealt.refusal });
       this.table = dealt.value;
+      this.broadcast();
+      return this.playBots();
+    }
+    if (message.type === 'add-bot') {
+      const added = addBot(this.table, seat, message.level, message.name);
+      if (!added.ok)
+        return void this.inbox[seat]?.push({ type: 'refused', refusal: added.refusal });
+      this.table = added.value;
       return this.broadcast();
     }
     if (message.type === 'cancel') {
@@ -100,6 +115,18 @@ class Host {
     const drew = applied.value.drew;
     if (drew !== null) for (const box of this.inbox) box.push({ type: 'drew', ...drew });
     this.broadcast();
+    this.playBots();
+  }
+
+  /** The host's `playBots`: each bot whose turn it is plays, and every seat hears it in order. */
+  playBots(): void {
+    for (let played = botTurn(this.table); played !== null; played = botTurn(this.table)) {
+      this.table = played.table;
+      for (const box of this.inbox)
+        box.push({ type: 'bot-turn', seat: played.seat, moves: played.moves });
+      if (played.drew === null) this.broadcast();
+      else this.tellDraw(played.table, played.drew);
+    }
   }
 
   broadcast(): void {
@@ -130,7 +157,10 @@ function playing(): Host {
     ],
     [['blue-1-a', 'blue-2-a', 'blue-3-a']],
   );
-  const host = new Host({ phase: 'playing', names: ['Ana', 'Bo', 'Cy'], game, working: null }, 3);
+  const host = new Host(
+    { phase: 'playing', names: ['Ana', 'Bo', 'Cy'], bots: [], game, working: null },
+    3,
+  );
   host.broadcast();
   return host;
 }
@@ -402,7 +432,10 @@ describe('the scores', () => {
       [{ rack: ['red-1-a', 'red-2-a', 'red-3-a'], hasMelded: true }, { rack: ['black-5-a'] }],
       [],
     );
-    const host = new Host({ phase: 'playing', names: ['Ana', 'Bo'], game, working: null }, 2);
+    const host = new Host(
+      { phase: 'playing', names: ['Ana', 'Bo'], bots: [], game, working: null },
+      2,
+    );
     host.broadcast();
     for (const id of ['red-1-a', 'red-2-a', 'red-3-a']) {
       host.hear(0, {
@@ -416,5 +449,100 @@ describe('the scores', () => {
     host.hear(0, { type: 'end-turn' });
     const loser = host.deliver(1, newFriends());
     expect(friendsBoard(loser)?.left).toEqual([0, 5]);
+  });
+});
+
+describe('bots at a friends’ table', () => {
+  /** Ana and two bots, Bo able to lay down a first meld and Cy only able to draw. */
+  function withBots(): Host {
+    const game = layout(
+      [
+        { rack: ['red-1-a', 'red-2-a', 'red-3-a', 'blue-9-a'], hasMelded: true },
+        { rack: ['black-10-a', 'black-11-a', 'black-12-a', 'orange-1-a'] },
+        { rack: ['orange-7-a', 'orange-8-a'] },
+      ],
+      [['blue-1-a', 'blue-2-a', 'blue-3-a']],
+    );
+    const bots = [
+      { seat: 1, level: 'medium' as const },
+      { seat: 2, level: 'medium' as const },
+    ];
+    const host = new Host(
+      { phase: 'playing', names: ['Ana', 'Erik', 'Cowthey Fuzzy'], bots, game, working: null },
+      3,
+    );
+    host.broadcast();
+    return host;
+  }
+
+  it('are seated by the first seat, as the next of their level not at the table', () => {
+    const host = new Host(newTable(), 2);
+    for (const name of ['Ana', 'Bo']) {
+      const sat = sitDown(host.table, name);
+      if (!sat.ok) throw new Error('could not sit');
+      host.table = sat.value.table;
+    }
+    host.broadcast();
+    let ana = host.deliver(0, newFriends());
+    let bo = host.deliver(1, newFriends());
+    const added = sendAddBot(ana, 'medium');
+    expect(added.send).toEqual([{ type: 'add-bot', level: 'medium', name: 'Erik' }]);
+    ana = host.deliver(0, sent(host, 0, added));
+    ana = host.deliver(0, sent(host, 0, sendAddBot(ana, 'medium')));
+    expect(ana.host?.names).toEqual(['Ana', 'Bo', 'Erik', 'Cowthey Fuzzy']);
+    expect(ana.host?.bots).toEqual([
+      { seat: 2, level: 'medium' },
+      { seat: 3, level: 'medium' },
+    ]);
+
+    bo = host.deliver(1, sent(host, 1, sendAddBot(host.deliver(1, bo), 'easy')));
+    expect(bo.notes.map(noteText)).toEqual(['The first player to sit down adds the bots.']);
+  });
+
+  it('are never shown away and have their faces', () => {
+    const host = withBots();
+    host.here = [true, false, false];
+    host.settle();
+    const ana = host.deliver(0, newFriends());
+    expect([0, 1, 2].map((seat) => isAway(ana, seat))).toEqual([false, false, false]);
+    expect(friendsBoard(ana)?.faces).toEqual([null, 'erik', 'fuzzy']);
+  });
+
+  it('play after the person, each played back in turn, never showing a bot’s rack', () => {
+    const host = withBots();
+    let ana = host.deliver(0, newFriends());
+    ana = host.deliver(0, sent(host, 0, sendTurn(ana, { type: 'draw', pick: null })));
+
+    // Ana's draw, Erik's first meld tile by tile, then Fuzzy's draw, in the order they played.
+    expect(ana.replay.map((frame) => [frame.name, frame.step.kind])).toEqual([
+      ['Ana', 'drawing'],
+      ['Ana', 'drew'],
+      ['Erik', 'placed'],
+      ['Erik', 'placed'],
+      ['Erik', 'placed'],
+      ['Erik', 'done'],
+      ['Cowthey Fuzzy', 'drawing'],
+      ['Cowthey Fuzzy', 'drew'],
+    ]);
+    const placed = ana.replay.flatMap((f) => (f.step.kind === 'placed' ? [f] : []));
+    expect(placed.map((f) => f.counts[1])).toEqual([3, 2, 1]);
+    expect(placed.at(-1)?.table.at(-1)).toEqual(ts('black-10-a', 'black-11-a', 'black-12-a'));
+    expect(ana.notes.map((note) => note.kind)).toEqual(['drew', 'played']);
+    expect(shownView(ana)?.current).toBe(0);
+    // Erik's tile he kept, and the one Fuzzy drew, are nowhere on Ana's page.
+    expect(JSON.stringify(ana)).not.toContain('orange-1-a');
+    expect(JSON.stringify(ana)).not.toContain('orange-7-a');
+  });
+
+  it('start the chain afresh on the next turn, not replaying the last one', () => {
+    const host = withBots();
+    let ana = host.deliver(0, newFriends());
+    ana = host.deliver(0, sent(host, 0, sendTurn(ana, { type: 'draw', pick: null })));
+    ana = host.deliver(0, sent(host, 0, placeTile(ana, { kind: 'to-new-set', tileId: 'red-1-a' })));
+    expect(ana.chain).toBeNull();
+    ana = host.deliver(0, sent(host, 0, takeBackTurn(ana)));
+    ana = host.deliver(0, sent(host, 0, sendTurn(ana, { type: 'draw', pick: null })));
+    expect(ana.replay[0]).toMatchObject({ name: 'Ana', step: { kind: 'drawing' } });
+    expect(ana.replay.filter((f) => f.name === 'Ana')).toHaveLength(2);
   });
 });

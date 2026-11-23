@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 
+import { LEVELS } from '@norikub/core/bot';
+import type { Level } from '@norikub/core/bot';
 import { parse } from '@norikub/core/parse';
 import { joinResponseSchema, SITE_REFUSED } from '@norikub/core/protocol';
 import type { JoinResponse } from '@norikub/core/protocol';
-import { displayNameSchema, refusalSchema } from '@norikub/core/table';
+import { displayNameSchema, MAX_SEATS, refusalSchema } from '@norikub/core/table';
 import { z } from 'zod';
 
 import type { Actions } from '../table/board.ts';
@@ -13,6 +15,7 @@ import { TableScreen } from '../table/GameScreen.tsx';
 import { hostRefusalText, tableRefusalText } from '../table/messages.ts';
 import {
   awayQuestion,
+  botLevel,
   friendsBoard,
   isAway,
   newFriends,
@@ -20,6 +23,7 @@ import {
   probeMove,
   received,
   reconnected,
+  sendAddBot,
   sendAwayVote,
   sendCancel,
   sendDeal,
@@ -171,8 +175,10 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
         names={host.names}
         you={host.you}
         away={host.names.map((_, seat) => isAway(friends, seat))}
+        bots={host.names.map((_, seat) => botLevel(friends, seat))}
         notes={friends.notes}
         status={status}
+        onAddBot={(level) => dispatch(sendAddBot(friends, level))}
         onDeal={() => dispatch(sendDeal(friends))}
         onCancel={() => dispatch(sendCancel(friends))}
       />
@@ -459,13 +465,21 @@ function SitDown({
   );
 }
 
+const LEVEL_LABELS: Readonly<Record<Level, string>> = {
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
+};
+
 function Seating({
   code,
   names,
   you,
   away,
+  bots,
   notes,
   status,
+  onAddBot,
   onDeal,
   onCancel,
 }: {
@@ -473,8 +487,11 @@ function Seating({
   names: readonly string[];
   you: number;
   away: readonly boolean[];
+  /** The level of the bot in each seat, or null for a person (`KUB-36`). */
+  bots: readonly (Level | null)[];
   notes: Friends['notes'];
   status: ReactNode;
+  onAddBot: (level: Level) => void;
   onDeal: () => void;
   onCancel: () => void;
 }) {
@@ -504,10 +521,21 @@ function Seating({
           <li key={seat}>
             {name}
             {seat === you ? ' (you)' : ''}
+            {bots[seat] ? ` · ${bots[seat]} bot` : ''}
             {away[seat] === true ? ' · away' : ''}
           </li>
         ))}
       </ol>
+      {you === 0 && names.length < MAX_SEATS ? (
+        <div className="add-bot" role="group" aria-label="Add a bot">
+          <span>Add a bot:</span>
+          {LEVELS.map((level) => (
+            <button key={level} type="button" onClick={() => onAddBot(level)}>
+              {LEVEL_LABELS[level]}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {you === 0 ? (
         <button type="button" className="primary" disabled={names.length < 2} onClick={onDeal}>
           Deal
@@ -518,7 +546,7 @@ function Seating({
           ? refused.join(' ')
           : you === 0
             ? names.length < 2
-              ? 'Deal once someone else has sat down.'
+              ? 'Deal once someone else has sat down, or add a bot.'
               : ''
             : `Waiting for ${names[0] ?? 'the first player'} to deal.`}
       </p>

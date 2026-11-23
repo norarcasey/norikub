@@ -1,12 +1,14 @@
 import { z } from 'zod';
 
+import { botFor, levelSchema, takeBotTurn } from './bot.ts';
+import type { Bot, Level } from './bot.ts';
 import { drawRefusalSchema, gameSchema, newGame } from './game.ts';
 import type { Game } from './game.ts';
 import { seededRandom } from './random.ts';
 import { tileSchema } from './tiles.ts';
 import { drawInstead, endTurn, move, resumeTurn, startTurn } from './turn.ts';
 import { moveRefusalSchema, moveSchema, turnFaultSchema } from './turn.ts';
-import type { Turn } from './turn.ts';
+import type { Move, Turn } from './turn.ts';
 import { turnView, turnViewSchema } from './view.ts';
 
 export const MIN_SEATS = 2;
@@ -35,17 +37,32 @@ const workingSchema = z
   .object({ rack: tilesSchema, table: z.array(tilesSchema).readonly() })
   .readonly();
 
+/**
+ * A seat the first player gave to a bot before the deal (`KUB-36`), and how hard it plays. The
+ * host plays it with that seat's view alone (invariant 2); it has no token, so no device can
+ * speak for it.
+ */
+export const botSeatSchema = z
+  .object({ seat: z.number().int().min(0), level: levelSchema })
+  .readonly();
+export type BotSeat = z.infer<typeof botSeatSchema>;
+
+// A table stored before bots could sit at one has none, which is what it had.
+const botsSchema = z.array(botSeatSchema).max(MAX_SEATS).readonly().default([]);
+
 export const tableSchema = z.discriminatedUnion('phase', [
   z
     .object({
       phase: z.literal('seating'),
       names: z.array(displayNameSchema).max(MAX_SEATS).readonly(),
+      bots: botsSchema,
     })
     .readonly(),
   z
     .object({
       phase: z.literal('playing'),
       names: z.array(displayNameSchema).min(MIN_SEATS).max(MAX_SEATS).readonly(),
+      bots: botsSchema,
       game: gameSchema,
       working: workingSchema.nullable(),
     })
@@ -59,6 +76,7 @@ export const tableSchema = z.discriminatedUnion('phase', [
     .object({
       phase: z.literal('cancelled'),
       names: z.array(displayNameSchema).max(MAX_SEATS).readonly(),
+      bots: botsSchema,
       by: z.number().int().min(0),
     })
     .readonly(),
@@ -71,6 +89,8 @@ export const tableRefusalSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('not-dealt') }).readonly(),
   z.object({ kind: z.literal('waiting-for-players') }).readonly(),
   z.object({ kind: z.literal('only-the-first-seat-deals') }).readonly(),
+  /** Bots are seated by the one who deals, as the dealer sets the table (`KUB-36`). */
+  z.object({ kind: z.literal('only-the-first-seat-adds-bots') }).readonly(),
   z.object({ kind: z.literal('no-such-seat') }).readonly(),
   z.object({ kind: z.literal('not-your-turn') }).readonly(),
   z.object({ kind: z.literal('game-over') }).readonly(),
@@ -100,7 +120,7 @@ const refused = (refusal: TableRefusal): { ok: false; refusal: Refusal } => ({
 });
 
 export function newTable(): Table {
-  return { phase: 'seating', names: [] };
+  return { phase: 'seating', names: [], bots: [] };
 }
 
 /** The next seat, for a name already parsed with `displayNameSchema`. */
@@ -110,6 +130,63 @@ export function sitDown(table: Table, name: string): Outcome<{ table: Table; sea
   if (table.names.length >= MAX_SEATS) return refused({ kind: 'table-full' });
   const names = [...table.names, name];
   return { ok: true, value: { seat: table.names.length, table: { ...table, names } } };
+}
+
+/**
+ * The first seat gives the next empty seat to a bot, before the deal (`KUB-36`). `name` is
+ * who it plays as, which the page picks from the bots' cast as the device game does; the
+ * rules know only its level. It takes a seat as a friend sitting down would, so a friend who
+ * comes after it sits in the seat after it.
+ */
+export function addBot(table: Table, seat: number, level: Level, name: string): Outcome<Table> {
+  if (table.phase === 'seating' && seat !== 0) {
+    return refused({ kind: 'only-the-first-seat-adds-bots' });
+  }
+  const sat = sitDown(table, name);
+  if (!sat.ok) return sat;
+  const bots = [...table.bots, { seat: sat.value.seat, level }];
+  return { ok: true, value: { ...sat.value.table, bots } };
+}
+
+/** The level of the bot in `seat`, or null when a person sits there. */
+export function botAt(table: Table, seat: number): Level | null {
+  return table.bots.find((bot) => bot.seat === seat)?.level ?? null;
+}
+
+/**
+ * One bot's turn, as the host tells it: the table after it, the bot's moves for each page's
+ * playback (`KUB-17`), empty when it drew, and where it drew from, as `apply` reports a draw.
+ */
+export type BotPlayed = {
+  readonly table: Table;
+  readonly seat: number;
+  readonly moves: readonly Move[];
+  readonly drew: Drew | null;
+};
+
+/**
+ * The turn of the bot whose turn it is, or null when it is nobody's or a person's. It is the
+ * device game's own call, `takeBotTurn`, which hands the bot its seat's `seatView` and nothing
+ * more (invariant 2) and puts what it proposes through the engine (invariant 1). `botOf` is
+ * there for the test that watches what a bot is handed.
+ *
+ * A bot's turn opens no working turn: it decides at once, so nothing of it is stored half-done.
+ */
+export function botTurn(table: Table, botOf: (level: Level) => Bot = botFor): BotPlayed | null {
+  if (table.phase !== 'playing' || table.game.status.kind !== 'playing') return null;
+  const { game } = table;
+  const seat = game.current;
+  const level = botAt(table, seat);
+  if (level === null) return null;
+  const result = takeBotTurn(game, botOf(level));
+  const next: Table = { ...table, game: result.game, working: null };
+  if (result.accepted && result.proposal.kind === 'play') {
+    return { table: next, seat, moves: result.proposal.moves, drew: null };
+  }
+  // A bot draws the pool's last tile, as `draw` does with no pick; an empty pool is a pass.
+  const passed = result.game.pool.length === game.pool.length;
+  const drew = { seat, drewAt: passed ? null : game.pool.length - 1 };
+  return { table: next, seat, moves: [], drew };
 }
 
 /**
@@ -131,7 +208,8 @@ export function deal(table: Table, seat: number, seed: number): Outcome<Table> {
   const random = seededRandom(seed);
   const first = Math.floor(random() * table.names.length);
   const game = newGame({ names: table.names, seed: Math.floor(random() * 2 ** 32), first });
-  return { ok: true, value: { phase: 'playing', names: table.names, game, working: null } };
+  const { names, bots } = table;
+  return { ok: true, value: { phase: 'playing', names, bots, game, working: null } };
 }
 
 /**
@@ -142,7 +220,8 @@ export function deal(table: Table, seat: number, seed: number): Outcome<Table> {
 export function cancel(table: Table, seat: number): Outcome<Table> {
   if (table.phase === 'cancelled') return refused({ kind: 'cancelled' });
   if (table.names[seat] === undefined) return refused({ kind: 'no-such-seat' });
-  return { ok: true, value: { phase: 'cancelled', names: table.names, by: seat } };
+  const { names, bots } = table;
+  return { ok: true, value: { phase: 'cancelled', names, bots, by: seat } };
 }
 
 /** The four messages that are a turn being played; only the seat whose turn it is sends them. */
@@ -220,6 +299,7 @@ export const tableViewSchema = z.discriminatedUnion('phase', [
       phase: z.literal('seating'),
       you: z.number().int().min(0),
       names: z.array(z.string()).readonly(),
+      bots: botsSchema,
     })
     .readonly(),
   z
@@ -227,6 +307,7 @@ export const tableViewSchema = z.discriminatedUnion('phase', [
       phase: z.literal('playing'),
       you: z.number().int().min(0),
       names: z.array(z.string()).readonly(),
+      bots: botsSchema,
       view: turnViewSchema,
     })
     .readonly(),
@@ -235,24 +316,30 @@ export const tableViewSchema = z.discriminatedUnion('phase', [
       phase: z.literal('cancelled'),
       you: z.number().int().min(0),
       names: z.array(z.string()).readonly(),
+      bots: botsSchema,
       by: z.number().int().min(0),
     })
     .readonly(),
 ]);
 export type TableView = z.infer<typeof tableViewSchema>;
 
-/** What `seat` is sent of the table. Before the deal nothing is secret; after, `turnView`. */
+/**
+ * What `seat` is sent of the table. Before the deal nothing is secret; after, `turnView`.
+ * Which seats are bots is no secret either: the page shows them as bots and never as away.
+ */
 export function tableViewFor(table: Table, seat: number): TableView {
-  if (table.phase === 'seating') return { phase: 'seating', you: seat, names: table.names };
+  const { names, bots } = table;
+  if (table.phase === 'seating') return { phase: 'seating', you: seat, names, bots };
   if (table.phase === 'cancelled') {
-    return { phase: 'cancelled', you: seat, names: table.names, by: table.by };
+    return { phase: 'cancelled', you: seat, names, bots, by: table.by };
   }
   const open = table.working !== null && table.game.status.kind === 'playing';
   const turn = open ? turnOf(table) : null;
   return {
     phase: 'playing',
     you: seat,
-    names: table.names,
+    names,
+    bots,
     view: turnView(table.game, turn, seat),
   };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { addBot } from '../../../packages/core/src/table.ts';
 import { isStale, presence, STALE_AFTER_MS } from '../src/presence.ts';
 import { joinRoom, newRoom, readRoom, seatOf, type Room } from '../src/room.ts';
 
@@ -41,6 +42,19 @@ describe('the room', () => {
     const room = sat(newRoom(), 't-nora', 'Nora');
     const before = { table: room.table, tokens: room.tokens };
     expect(readRoom(JSON.stringify(before))).toEqual({ ...room, stall: null });
+  });
+
+  it('keeps a bot’s seat with no token, between friends’ seats, and reads it back (KUB-36)', () => {
+    const nora = sat(newRoom(), 't-nora', 'Nora');
+    const withBot = addBot(nora.table, 0, 'medium', 'Erik');
+    if (!withBot.ok) throw new Error('no bot');
+    const room = sat({ ...nora, table: withBot.value }, 't-kit', 'Kit');
+    expect(room.tokens).toEqual(['t-nora', null, 't-kit']);
+    expect(seatOf(room, 't-kit')).toBe(2);
+    expect(readRoom(JSON.stringify(room))).toEqual(room);
+    // A room stored before bots could sit has none.
+    const before = { table: { phase: 'seating', names: ['Nora'] }, tokens: nora.tokens };
+    expect(readRoom(JSON.stringify(before))).toEqual(nora);
   });
 
   it('throws on a stored row that is not a room, rather than starting over on top of it', () => {
