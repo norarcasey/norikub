@@ -42,6 +42,11 @@ export type Friends = {
   readonly pile: Pile | null;
   /** A draw the host announced, waiting for the view that comes after it. */
   readonly drew: { readonly seat: number; readonly drewAt: number | null } | null;
+  /**
+   * Which seats have a device connected, as the host last said (`KUB-35`); null until it has.
+   * A seat with none is away, never gone: it waits for its device.
+   */
+  readonly here: readonly boolean[] | null;
 };
 
 /** `rows` is the rack as this device last laid it out, kept under the table's code. */
@@ -56,6 +61,7 @@ export function newFriends(rows: { rows: RackRows; startRows: RackRows } | null 
     replay: [],
     pile: null,
     drew: null,
+    here: null,
   };
 }
 
@@ -80,9 +86,10 @@ export function received(state: Friends, message: TableMessage): Friends {
     }
     case 'drew':
       return { ...state, drew: { seat: message.seat, drewAt: message.drewAt } };
-    // Bots at a friends' table are KUB-36, and who is here is KUB-35; no host sends either yet.
-    case 'bot-turn':
     case 'presence':
+      return { ...state, here: message.here };
+    // Bots at a friends' table are KUB-36; no host sends their moves yet.
+    case 'bot-turn':
       return state;
   }
 }
@@ -342,5 +349,11 @@ export function friendsBoard(state: Friends): Board | null {
     rows: state.rows,
     notes: state.notes,
     replay: state.replay,
+    away: counts.map((_, seat) => isAway(state, seat)),
   };
+}
+
+/** A seat the host has said has no device connected. Before it has said, nobody is away. */
+export function isAway(state: Friends, seat: number): boolean {
+  return state.here?.[seat] === false;
 }

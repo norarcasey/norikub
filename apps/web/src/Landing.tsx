@@ -16,12 +16,15 @@ export function Landing({
   last,
   onDeal,
   friendsLink,
+  backLink = null,
 }: {
   /** What Play now deals: the setup played last, or the first one there is. */
   readonly last: Setup;
   readonly onDeal: (setup: Setup) => void;
   /** A new friends' table's link, or null in a build with no game host. */
   readonly friendsLink: string | null;
+  /** The last friends' table this device holds a seat at, or null (KUB-35). */
+  readonly backLink?: string | null;
 }) {
   const [setting, setSetting] = useState(false);
   return (
@@ -37,6 +40,11 @@ export function Landing({
           </>
         ) : (
           <>
+            {backLink !== null && (
+              <a className="landing-choice" href={backLink}>
+                Back to your game
+              </a>
+            )}
             <p>{setupText(last)}</p>
             <button type="button" className="primary" onClick={() => onDeal(last)}>
               Play now

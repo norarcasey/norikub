@@ -7,6 +7,7 @@ import {
   isTablePath,
   keepSeat,
   keptSeat,
+  lastTable,
   newTableCode,
   tableCodeOf,
 } from './seat.ts';
@@ -73,5 +74,31 @@ describe('the seat kept on this device', () => {
     expect(keptSeat('abcd2345efgh', refusing)).toBeNull();
     expect(() => keepSeat('abcd2345efgh', seat, refusing)).not.toThrow();
     expect(() => forgetSeat('abcd2345efgh', refusing)).not.toThrow();
+  });
+});
+
+describe('the way back to the last table', () => {
+  const seat = { token: 'b'.repeat(32), seat: 0, rows: null, startRows: null };
+
+  it('is the table this device last kept a seat at, while it still holds that seat', () => {
+    localStorage.clear();
+    expect(lastTable()).toBeNull();
+    keepSeat('abcd2345efgh', seat);
+    keepSeat('wxyz2345efgh', seat);
+    expect(lastTable()).toBe('wxyz2345efgh');
+    forgetSeat('wxyz2345efgh');
+    expect(lastTable()).toBeNull();
+  });
+
+  it('is nothing when what is kept is not a code, or storage refuses', () => {
+    localStorage.setItem('norikub.lastTable', 'NOT A CODE');
+    expect(lastTable()).toBeNull();
+    const refusing: Storage = {
+      ...localStorage,
+      getItem: () => {
+        throw new Error('blocked');
+      },
+    };
+    expect(lastTable(refusing)).toBeNull();
   });
 });

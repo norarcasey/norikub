@@ -37,6 +37,11 @@ export type Board = {
   readonly rows: RackRows;
   readonly notes: readonly Note[];
   readonly replay: readonly Frame[];
+  /**
+   * Seats with no device connected, by seat (`KUB-35`): away, never gone. Only a friends'
+   * table has anyone away; the bots are always here.
+   */
+  readonly away: readonly boolean[];
 };
 
 /** What the screen can ask for. Each goes to the engine, never decided by the screen. */
@@ -68,6 +73,7 @@ export function boardOf(session: Session): Board {
     rows: session.rows,
     notes: session.notes,
     replay: session.replay,
+    away: game.players.map(() => false),
   };
 }
 

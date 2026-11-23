@@ -2,14 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 
 import { parse } from '@norikub/core/parse';
-import {
-  CLOSE_UNKNOWN_SEAT,
-  PING,
-  PING_EVERY_MS,
-  PONG,
-  joinResponseSchema,
-  tableMessageSchema,
-} from '@norikub/core/protocol';
+import { joinResponseSchema } from '@norikub/core/protocol';
 import { displayNameSchema, tableRefusalSchema } from '@norikub/core/table';
 import { z } from 'zod';
 
@@ -18,6 +11,7 @@ import { TableScreen } from '../table/GameScreen.tsx';
 import { tableRefusalText } from '../table/messages.ts';
 import {
   friendsBoard,
+  isAway,
   newFriends,
   placeTile,
   probeMove,
@@ -30,11 +24,11 @@ import {
 } from './friends.ts';
 import type { Friends, Sent } from './friends.ts';
 import { tableJoinUrl, tableSocketUrl } from './gameServer.ts';
+import { TableLink } from './link.ts';
+import type { Link } from './link.ts';
 import { forgetSeat, keepSeat, keptSeat, tableCodeOf } from './seat.ts';
 import type { KeptSeat } from './seat.ts';
 import './friends.css';
-
-type Link = 'connecting' | 'open' | 'lost';
 
 /**
  * What `/t/…` shows: the table its code names, or why there is none. `server` is the game
@@ -68,54 +62,40 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
   const [lostSeat, setLostSeat] = useState(false);
   const [friends, setFriends] = useState<Friends>(() => newFriends(rowsOf(keptSeat(code))));
   const [link, setLink] = useState<Link>('connecting');
-  const socket = useRef<WebSocket | null>(null);
+  const socket = useRef<TableLink | null>(null);
   const token = kept?.token ?? null;
 
   useEffect(() => {
     if (token === null) return;
-    let ws: WebSocket | null = null;
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    let tries = 0;
-    let done = false;
-    const open = () => {
-      const opened = new WebSocket(tableSocketUrl(server, code, token));
-      ws = opened;
-      socket.current = opened;
-      opened.addEventListener('open', () => {
-        tries = 0;
-        setLink('open');
-        setFriends(reconnected);
-      });
-      opened.addEventListener('message', (event) => {
-        if (event.data === PONG) return;
-        const message = parse(tableMessageSchema, readJson(event.data));
-        if (message.ok) setFriends((state) => received(state, message.value));
-        else console.warn('[norikub] the table sent a frame that is not a message', message.issues);
-      });
-      opened.addEventListener('close', (event) => {
-        if (done) return;
-        socket.current = null;
-        if (event.code === CLOSE_UNKNOWN_SEAT) {
-          forgetSeat(code);
-          setLostSeat(true);
-          setKept(null);
-          return;
-        }
-        setLink('lost');
-        // Sooner at first, as a phone coming back into signal usually is; never slower than 10 s.
-        retry = setTimeout(open, Math.min(10_000, 500 * 2 ** tries++));
-      });
+    const link = new TableLink(tableSocketUrl(server, code, token), {
+      link: setLink,
+      reconnected: () => setFriends(reconnected),
+      message: (message) => setFriends((state) => received(state, message)),
+      lostSeat: () => {
+        forgetSeat(code);
+        setLostSeat(true);
+        setKept(null);
+      },
+    });
+    socket.current = link;
+    link.start();
+    // A page iOS suspended wakes with a socket that may be dead and timers that stood still:
+    // check at once rather than waiting for them. Offline, probe now, so the page says it is
+    // reconnecting within a pong's wait (as Hanora's HAN-5).
+    const wake = () => {
+      if (document.visibilityState === 'visible') link.wake();
     };
-    open();
-    const ping = setInterval(() => {
-      if (ws?.readyState === WebSocket.OPEN) ws.send(PING);
-    }, PING_EVERY_MS);
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('pageshow', wake);
+    window.addEventListener('online', wake);
+    window.addEventListener('offline', wake);
     return () => {
-      done = true;
-      clearTimeout(retry);
-      clearInterval(ping);
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('pageshow', wake);
+      window.removeEventListener('online', wake);
+      window.removeEventListener('offline', wake);
       socket.current = null;
-      ws?.close();
+      link.stop();
     };
   }, [code, server, token]);
 
@@ -144,10 +124,7 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
   // Sent on the open socket, or not made at all: a move made while the socket is down would
   // be shown and never judged.
   const dispatch = (sent: Sent) => {
-    const ws = socket.current;
-    if (ws === null || ws.readyState !== WebSocket.OPEN) return;
-    setFriends(sent.state);
-    for (const message of sent.send) ws.send(JSON.stringify(message));
+    if (socket.current?.send(sent.send) === true) setFriends(sent.state);
   };
 
   const host = friends.host;
@@ -166,6 +143,7 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
         code={code}
         names={host.names}
         you={host.you}
+        away={host.names.map((_, seat) => isAway(friends, seat))}
         notes={friends.notes}
         status={status}
         onDeal={() => dispatch(sendDeal(friends))}
@@ -198,15 +176,6 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
 function rowsOf(seat: KeptSeat | null) {
   if (seat === null || seat.rows === null) return null;
   return { rows: seat.rows, startRows: seat.startRows ?? seat.rows };
-}
-
-function readJson(data: unknown): unknown {
-  if (typeof data !== 'string') return undefined;
-  try {
-    return JSON.parse(data);
-  } catch {
-    return undefined;
-  }
 }
 
 function Panel({ children }: { children: ReactNode }) {
@@ -298,6 +267,7 @@ function Seating({
   code,
   names,
   you,
+  away,
   notes,
   status,
   onDeal,
@@ -305,6 +275,7 @@ function Seating({
   code: string;
   names: readonly string[];
   you: number;
+  away: readonly boolean[];
   notes: Friends['notes'];
   status: ReactNode;
   onDeal: () => void;
@@ -335,6 +306,7 @@ function Seating({
           <li key={seat}>
             {name}
             {seat === you ? ' (you)' : ''}
+            {away[seat] === true ? ' · away' : ''}
           </li>
         ))}
       </ol>

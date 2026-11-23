@@ -151,6 +151,29 @@ runtime without waking the object, and while any socket is open an alarm closes 
 silent for 50 s, because a phone that loses signal rarely closes its socket. Hanora measured
 a lost device shown as away in 59 s and back in its seat 30 ms after the network returned.
 
+Built in `KUB-35`, 22 Nov 2026: `apps/game/src/presence.ts` is Hanora's, unchanged, and the
+page's socket is `apps/web/src/online/link.ts` (Hanora's `TableConnection`): a ping met by
+nothing within 10 s, or a socket that hears nothing within 10 s of opening, is dropped and
+tried again, and a page that wakes, comes online or goes offline checks at once and skips any
+backoff. The opponents in the game bar, and the seated list before the deal, say who is away.
+An installed app opens at `/`, so the start screen (`KUB-42`) and the bot game's bar both
+offer **Back to your game** for the last table the device holds a seat at.
+
+Measured with `e2e/presence.spec.ts` (`pnpm e2e`), two Chromium contexts through
+`wrangler dev`, twice, on 22 Nov 2026:
+
+| What                                                    | Took           |
+| ------------------------------------------------------- | -------------- |
+| A closed page shown away to the others                  | 13 ms, 13 ms   |
+| The page reopened from "Back to your game", in its seat | 246 ms, 264 ms |
+| An offline page saying "Reconnecting…" to its player    | 10.4 s, 10.4 s |
+| An offline device shown away to the others              | 59.3 s, 58.9 s |
+| Back online, shown here again to the others             | 25 ms, 26 ms   |
+
+The offline time is the sweep's: up to 50 s since the socket was last heard, found at the
+next 15 s sweep. It is the one slow test in `pnpm e2e`, about a minute, and the only test of
+the sweep against the real runtime.
+
 What Hanora never needed, and Norikub does: in a turn-based game, **an away player stalls
 everyone**. Nothing is decided here. The rules give a turn a time limit (a minute, at a real
 table), and friends playing over an evening may want none. The likely shape is no limit, and
@@ -201,7 +224,7 @@ Filed from `KUB-12`, in order:
    through `wrangler dev` and reads every frame each was sent. `bot-turn` is parsed and not
    yet played back: no host sends it until `KUB-36`, whose playback can take each played
    tile from the table in the view that follows, since a bot's moves name tiles by id.
-4. `KUB-35` Who is here, and coming back to your seat.
+4. `KUB-35` Who is here, and coming back to your seat. Built: see "Who is here", above.
 5. `KUB-36` Bots in the empty seats of a friends' table.
 6. `KUB-37` A player who is away does not stall the table (Nora's choice).
 7. `KUB-38` Finished online games kept for signed-in seats, after `KUB-29`, for `KUB-13`.

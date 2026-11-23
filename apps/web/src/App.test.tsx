@@ -198,6 +198,25 @@ describe('playing friends', () => {
     expect(link.getAttribute('href')).toMatch(/^\/t\/[a-z0-9]{12}$/);
   });
 
+  it('offers the way back to the last table this device sits at, on the start screen and in a game', () => {
+    localStorage.setItem(
+      'norikub.table.abcd2345efgh',
+      JSON.stringify({ token: 'c'.repeat(32), seat: 1, rows: null, startRows: null }),
+    );
+    localStorage.setItem('norikub.lastTable', 'abcd2345efgh');
+    const host = new URL('http://localhost:8787');
+    const landing = render(<App account={null} friends={host} />);
+    expect(screen.getByRole('region', { name: 'Start' })).toBeTruthy();
+    const back = screen.getByRole('link', { name: 'Back to your game' });
+    expect(back.getAttribute('href')).toBe('/t/abcd2345efgh');
+    landing.unmount();
+    render(<App seed={7} account={null} friends={host} />);
+    expect(screen.getByRole('link', { name: 'Back to your game' }).getAttribute('href')).toBe(
+      '/t/abcd2345efgh',
+    );
+    localStorage.clear();
+  });
+
   it('offers nothing in a build with no game host', () => {
     render(<App seed={7} account={null} friends={null} />);
     expect(screen.queryByRole('link', { name: 'Play friends' })).toBeNull();

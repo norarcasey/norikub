@@ -183,6 +183,53 @@ describe('the Worker', () => {
   });
 });
 
+describe('who is at the table', () => {
+  const here = (seat: Seat) =>
+    seat
+      .messages()
+      .flatMap((m) => (m.type === 'presence' ? [m.here.join()] : []))
+      .at(-1);
+
+  it('tells everyone when a seat connects and when it drops, and keeps the seat', async () => {
+    const code = freshCode();
+    const nora = await seatAt(code, 'Nora');
+    const s0 = new Seat(code, nora.token);
+    await s0.until((s) => here(s) === 'true');
+    const aiko = await seatAt(code, 'Aiko');
+    // Sat down and not yet connected: away, and the others can see so.
+    await s0.until((s) => here(s) === 'true,false');
+    const s1 = new Seat(code, aiko.token);
+    await s0.until((s) => here(s) === 'true,true');
+    await s1.until((s) => here(s) === 'true,true');
+
+    s1.close();
+    await s0.until((s) => here(s) === 'true,false');
+    expect(s0.lastView().names).toEqual(['Nora', 'Aiko']);
+
+    const back = new Seat(code, aiko.token);
+    await s0.until((s) => here(s) === 'true,true');
+    await back.until((s) => s.views().at(-1)?.you === 1);
+    s0.close();
+    back.close();
+  });
+
+  it('counts a seat here while any of its devices is', async () => {
+    const code = freshCode();
+    const nora = await seatAt(code, 'Nora');
+    const phone = new Seat(code, nora.token);
+    await phone.until((s) => here(s) === 'true');
+    const laptop = new Seat(code, nora.token);
+    await laptop.until((s) => here(s) === 'true');
+    const told = () => laptop.messages().filter((m) => m.type === 'presence').length;
+    const before = told();
+    phone.close();
+    // The phone's close is told to the laptop, and Nora is still here on it.
+    await laptop.until(() => told() > before);
+    expect(here(laptop)).toBe('true');
+    laptop.close();
+  });
+});
+
 describe('a table played over two sockets', () => {
   it('deals, shares a reworked turn, draws, and never shows a seat another rack or the pool', async () => {
     const code = freshCode();

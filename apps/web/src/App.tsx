@@ -5,7 +5,7 @@ import { AccountPanel } from './account/AccountPanel.tsx';
 import type { Account } from './account/port.ts';
 import { env } from './env.ts';
 import { gameServer } from './online/gameServer.ts';
-import { newTableCode } from './online/seat.ts';
+import { lastTable, newTableCode } from './online/seat.ts';
 import './online/friends.css';
 import { standing } from '@norikub/core/match';
 
@@ -58,6 +58,7 @@ export function App({
   const [accountOpen, setAccountOpen] = useState(false);
   const [dealOpen, setDealOpen] = useState(false);
   const [tableCode] = useState(() => newTableCode());
+  const [backTo] = useState(lastTable);
   const change = (next: Session) => {
     onSave(next);
     setSession(next);
@@ -72,6 +73,8 @@ export function App({
     if (dealt !== null) change(dealt);
   };
   const friendsLink = friends === null ? null : `/t/${tableCode}`;
+  // The last friends' table this device sits at (KUB-35): an installed app opens here, not there.
+  const backLink = friends === null || backTo === null ? null : `/t/${backTo}`;
   // A build without the values does not offer sign-in at all, and plays as before.
   const offered = account === undefined ? env !== null : account !== null;
   if (session === null) {
@@ -79,7 +82,7 @@ export function App({
       <main>
         <UpdateNotice />
         <h1 className="visually-hidden">Norikub</h1>
-        <Landing last={last} onDeal={deal} friendsLink={friendsLink} />
+        <Landing last={last} onDeal={deal} friendsLink={friendsLink} backLink={backLink} />
       </main>
     );
   }
@@ -101,6 +104,11 @@ export function App({
               <button type="button" className="account-open" onClick={() => setDealOpen(true)}>
                 New game
               </button>
+            )}
+            {backLink !== null && (
+              <a className="play-friends" href={backLink}>
+                Back to your game
+              </a>
             )}
             {friendsLink !== null && (
               // A new table is a new link; going there leaves this game saved as it is.

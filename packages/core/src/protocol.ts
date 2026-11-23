@@ -81,3 +81,8 @@ export const PONG_WITHIN_MS = 10_000;
 
 /** Close codes the page acts on, in the application's own 4000–4999 range. */
 export const CLOSE_UNKNOWN_SEAT = 4403;
+/**
+ * The host's sweep closed a socket that had not pinged for too long (`KUB-35`). The page does
+ * nothing special with it: like any other drop, it reconnects with its token.
+ */
+export const CLOSE_GONE_QUIET = 4408;

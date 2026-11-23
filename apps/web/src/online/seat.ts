@@ -60,6 +60,8 @@ const seatSchema = z
 export type KeptSeat = z.infer<typeof seatSchema>;
 
 const key = (code: string) => `norikub.table.${code}`;
+/** The table this device last kept a seat at, for the way back from the bot game (`KUB-35`). */
+const LAST_KEY = 'norikub.lastTable';
 
 /**
  * localStorage, which a private window or blocked site data can take away: every read and
@@ -86,6 +88,7 @@ export function keepSeat(
 ): void {
   try {
     storage?.setItem(key(code), JSON.stringify(seat));
+    storage?.setItem(LAST_KEY, code);
   } catch {
     // Storage full or refused: the seat lasts as long as this page, which is all it can.
   }
@@ -96,6 +99,19 @@ export function forgetSeat(code: string, storage: Storage | null = localStorageO
     storage?.removeItem(key(code));
   } catch {
     // Nothing kept is nothing to forget.
+  }
+}
+
+/**
+ * The last table this device holds a seat at, or null. An installed app opens at `/`, the bot
+ * game, so a player who closed it mid-game would otherwise need the link again.
+ */
+export function lastTable(storage: Storage | null = localStorageOrNull()): string | null {
+  try {
+    const code = parse(tableCodeSchema, storage?.getItem(LAST_KEY));
+    return code.ok && keptSeat(code.value, storage) !== null ? code.value : null;
+  } catch {
+    return null;
   }
 }
 

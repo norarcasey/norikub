@@ -452,6 +452,7 @@ export function TableScreen({
             seat,
             name,
             count: watching?.counts[seat] ?? board.counts[seat] ?? 0,
+            away: board.away[seat] === true,
             playing:
               watching === null
                 ? status.kind === 'playing' && board.current === seat
@@ -465,8 +466,14 @@ export function TableScreen({
       <header className="game-bar">
         <ul className="opponents" aria-label="Opponents">
           {opponents.map((o) => (
-            <li key={o.seat} data-seat={o.seat} data-playing={o.playing || undefined}>
+            <li
+              key={o.seat}
+              data-seat={o.seat}
+              data-playing={o.playing || undefined}
+              data-away={o.away || undefined}
+            >
               {o.name}: {o.count} tiles
+              {o.away ? <span className="away"> · away</span> : null}
             </li>
           ))}
         </ul>

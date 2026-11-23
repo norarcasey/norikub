@@ -256,6 +256,17 @@ describe('seating and the deal', () => {
   });
 });
 
+describe('who is here', () => {
+  it('shows a seat away once the host says it has no device connected, and back again', () => {
+    let page = playing().deliver(0, newFriends());
+    expect(friendsBoard(page)?.away).toEqual([false, false, false]);
+    page = received(page, { type: 'presence', here: [true, false, true] });
+    expect(friendsBoard(page)?.away).toEqual([false, true, false]);
+    page = received(page, { type: 'presence', here: [true, true, true] });
+    expect(friendsBoard(page)?.away).toEqual([false, false, false]);
+  });
+});
+
 describe('the scores', () => {
   it('shows another player’s points left only where their score says them', () => {
     const game = layout(

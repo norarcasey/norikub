@@ -477,6 +477,11 @@ body {
     0 0 0 2px var(--ok);
 }
 
+/* An opponent with no device connected (KUB-35): still at the table, only away. */
+.opponents li[data-away] {
+  opacity: 0.6;
+}
+
 /* The opponent whose turn is playing back. */
 .opponents li[data-playing] {
   font-weight: 700;
