@@ -626,48 +626,25 @@ body {
 }
 
 /*
- * Who each bot plays as (KUB-43): the cast's faces in a row over that bot's level, the picked
- * face ringed in the tile colour and the rest dimmed, so the pick reads at a glance.
+ * Each bot's face beside its level (KUB-43). The face follows from the level, so it changes as
+ * the pills are tapped: the picker shows who is coming before Deal.
  */
 .lineup-seat {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  padding-top: 8px;
-  border-top: 1px solid rgb(243 239 228 / 0.2);
 }
 
-.lineup .cast legend {
+/* The name over its three pills, so a long one (Lumber Jill Nora) never pushes them apart. */
+.lineup-seat fieldset {
+  justify-content: flex-start;
+}
+
+.lineup-seat legend {
   float: none;
   width: 100%;
   margin: 0 0 4px;
-}
-
-.lineup .cast {
-  gap: 2px;
-}
-
-.lineup .cast label {
-  min-height: 0;
-  padding: 2px;
-  border-color: transparent;
-}
-
-/* Seven to a row down to a 360px phone. */
-.lineup .cast label img {
-  width: clamp(32px, 9vw, 44px);
-  height: auto;
-  opacity: 0.55;
-}
-
-.lineup .cast label:has(input:checked) {
-  border-color: var(--tile);
-  background: transparent;
-}
-
-.lineup .cast label:has(input:checked) img {
-  opacity: 1;
 }
 
 .lineup .lineup-hint {

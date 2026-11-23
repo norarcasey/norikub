@@ -47,27 +47,30 @@ describe('the bots at the table (KUB-41, KUB-43)', () => {
     ).toEqual(['Erik', 'Asa & Bo']);
   });
 
-  it('are each given a character no other seat has', () => {
-    expect(seatsFor(['medium', 'medium', 'hard'])).toEqual([
-      { level: 'medium', who: 'tatum' },
-      { level: 'medium', who: 'edward' },
-      { level: 'hard', who: 'erik' },
+  it('are the next of their level’s three, whichever seats they sit in', () => {
+    expect(seatsFor(['hard', 'easy', 'hard'])).toEqual([
+      { level: 'hard', who: 'michael' },
+      { level: 'easy', who: 'tatum' },
+      { level: 'hard', who: 'nora' },
+    ]);
+    expect(seatsFor(['easy', 'easy', 'easy']).map((seat) => seat.who)).toEqual([
+      'tatum',
+      'edward',
+      'roscoe',
+    ]);
+    expect(seatsFor(['medium', 'medium', 'medium']).map((seat) => seat.who)).toEqual([
+      'erik',
+      'fuzzy',
+      'asabo',
     ]);
   });
 
   it('play the seats at the levels picked', () => {
     // The person draws; each bot then plays its turn at its own level before the next.
-    const lineup = [
-      { level: 'hard', who: 'nora' },
-      { level: 'easy', who: 'tatum' },
-    ] as const;
+    const lineup = seatsFor(['hard', 'easy']);
     const s = newSession(7, { lineup, format: SINGLE });
     expect(s.lineup).toEqual(lineup);
-    expect(s.game.players.map((player) => player.name)).toEqual([
-      'You',
-      'Lumber Jill Nora',
-      'Tatum',
-    ]);
+    expect(s.game.players.map((player) => player.name)).toEqual(['You', 'Michael', 'Tatum']);
     const next = drawTile(s);
     expect(next.lineup).toEqual(lineup);
     expect(next.game.current).toBe(0);

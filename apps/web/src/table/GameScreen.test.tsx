@@ -445,8 +445,8 @@ describe('the end of the game', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New game' }));
     expect(onNewGame).toHaveBeenCalledExactlyOnceWith({
       lineup: [
-        { level: 'medium', who: 'tatum' },
-        { level: 'hard', who: 'edward' },
+        { level: 'medium', who: 'erik' },
+        { level: 'hard', who: 'michael' },
       ],
       format: SINGLE,
     });

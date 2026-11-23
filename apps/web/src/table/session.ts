@@ -11,7 +11,7 @@ import type { Move, MoveRefusal, Turn, TurnFault } from '@norikub/core/turn';
 
 import { toMove } from './drag.ts';
 import type { DropTarget } from './drag.ts';
-import { CAST_NAMES, firstFree } from './cast.ts';
+import { CAST_NAMES, ROSTER } from './cast.ts';
 import type { Who } from './cast.ts';
 import { fitPile, takeFromPile } from './pile.ts';
 import type { Pile } from './pile.ts';
@@ -24,8 +24,8 @@ import type { Frame } from './replay.ts';
 export const PERSON = 0;
 
 /**
- * One bot's seat: how it plays, and who it plays as (KUB-43). The two are picked apart, and
- * only the level reaches a bot.
+ * One bot's seat: how it plays, and who it plays as (KUB-43). The level is picked; who follows
+ * from it (`seatsFor`). Only the level reaches a bot.
  */
 export type BotSeat = { readonly level: Level; readonly who: Who };
 
@@ -34,15 +34,20 @@ export type BotSeat = { readonly level: Level; readonly who: Who };
  * engine never sees it: a level only chooses which bot is handed that seat's view, and the bot's
  * turn goes through the engine like anyone's (invariant 1). No two seats share a character, so
  * two bots of one level are told apart by face and name.
+ *
+ * Always made by `seatsFor`, from levels: a lineup is never put together seat by seat.
  */
 export type Lineup = readonly BotSeat[];
 
-/** Seats at these levels, each given the first character not already sitting. */
+/**
+ * Seats at these levels, each given the next of its level's roster: three hard bots are
+ * Michael, Lumber Jill Nora and Reilly, whichever seats they sit in.
+ */
 export function seatsFor(levels: readonly Level[]): Lineup {
-  return levels.reduce<BotSeat[]>(
-    (seats, level) => [...seats, { level, who: firstFree(seats.map((seat) => seat.who)) }],
-    [],
-  );
+  return levels.map((level, i) => {
+    const nth = levels.slice(0, i).filter((other) => other === level).length;
+    return { level, who: ROSTER[level][nth] ?? ROSTER[level][0] };
+  });
 }
 
 /** The bots a game starts with when none were picked: the one bot there was before KUB-41. */

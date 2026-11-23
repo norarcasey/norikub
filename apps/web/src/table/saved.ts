@@ -52,10 +52,7 @@ const lineupSchema = z
   .array(z.object({ level: levelSchema, who: whoSchema }).readonly())
   .min(1)
   .max(3)
-  .readonly()
-  .refine((seats) => new Set(seats.map((seat) => seat.who)).size === seats.length, {
-    message: 'two seats with one character',
-  });
+  .readonly();
 
 /**
  * Version 2 adds the lineup, the level of each bot (KUB-41). A version 1 game was played
@@ -64,9 +61,10 @@ const lineupSchema = z
  * Version 3 adds the match (KUB-42). A game saved before it was one game on its own, and
  * resumes as one.
  *
- * Version 4 gives each bot a character (KUB-43). An older game's bots are handed the cast in
- * order, as a new game's would be, and are renamed for them: "Medium bot A" in the bar beside
- * Tatum's face would be two names for one player.
+ * Version 4 gives each bot a character (KUB-43). Whatever a game was saved with, its bots
+ * resume as their levels' roster says (`seatsFor`) and are renamed for it: a game from before
+ * characters, or from the day each seat picked any face, would otherwise show "Medium bot A", or
+ * Tatum playing hard, beside the roster's faces.
  */
 export const savedSchema = z.union([
   z
@@ -103,13 +101,12 @@ export function fromSaved(input: unknown): Session | null {
   const parsed = parse(savedSchema, input);
   if (!parsed.ok) return null;
   const saved = parsed.value;
-  const lineup =
+  const lineup = seatsFor(
     saved.version === 1
-      ? FIRST_LINEUP
-      : saved.version === 4
-        ? saved.lineup
-        : seatsFor(saved.lineup);
-  const game = saved.version === 4 ? saved.game : named(saved.game, lineup);
+      ? FIRST_LINEUP.map((seat) => seat.level)
+      : saved.lineup.map((seat) => (typeof seat === 'string' ? seat : seat.level)),
+  );
+  const game = named(saved.game, lineup);
   const match = 'match' in saved ? saved.match : newMatch(SINGLE);
   // A lineup or a match for another number of seats is not this game's: one of them was
   // written wrong, and resuming would score a game nobody played.

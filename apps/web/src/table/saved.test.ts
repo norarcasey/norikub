@@ -48,24 +48,12 @@ describe('a saved session', () => {
   });
 
   it('keeps the bots picked for the game (KUB-41)', () => {
-    const lineup = [
-      { level: 'easy', who: 'michael' },
-      { level: 'hard', who: 'fuzzy' },
-    ] as const;
+    const lineup = seatsFor(['easy', 'hard']);
     const picked = newSession(7, { lineup, format: SINGLE });
     expect(fromSaved(reloaded(toSaved(picked)))?.lineup).toEqual(lineup);
   });
 
-  it('is refused when two of its bots are one character (KUB-43)', () => {
-    const saved = toSaved(midTurn);
-    const twins = [
-      { level: 'easy', who: 'erik' },
-      { level: 'hard', who: 'erik' },
-    ];
-    expect(fromSaved(reloaded({ ...saved, lineup: twins }))).toBeNull();
-  });
-
-  it('gives a game saved before characters its bots in cast order, renamed for them', () => {
+  it('gives a game saved before characters its levels’ roster, renamed for it (KUB-43)', () => {
     const { game, turn, rows, startRows, pile, match } = toSaved(midTurn);
     const old = {
       ...game,
@@ -78,8 +66,23 @@ describe('a saved session', () => {
       reloaded({ version: 3, game: old, turn, rows, startRows, pile, lineup, match }),
     );
     expect(back?.lineup).toEqual(seatsFor(['hard', 'hard']));
-    expect(back?.game.players.map((player) => player.name)).toEqual(['You', 'Tatum', 'Edward']);
+    expect(back?.game.players.map((player) => player.name)).toEqual([
+      'You',
+      'Michael',
+      'Lumber Jill Nora',
+    ]);
     expect(back?.turn?.rack).toEqual(midTurn.turn?.rack);
+  });
+
+  it('seats the roster over a game saved when any face could play any level', () => {
+    const saved = toSaved(midTurn);
+    const free = [
+      { level: 'hard', who: 'tatum' },
+      { level: 'easy', who: 'tatum' },
+    ];
+    const back = fromSaved(reloaded({ ...saved, lineup: free }));
+    expect(back?.lineup).toEqual(seatsFor(['hard', 'easy']));
+    expect(back?.game.players.map((player) => player.name)).toEqual(['You', 'Michael', 'Tatum']);
   });
 
   it('resumes a game saved before bots had levels against the medium bot it was playing', () => {
