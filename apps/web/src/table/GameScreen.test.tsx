@@ -440,8 +440,8 @@ describe('the end of the game', () => {
     render(<ScoresHarness game={exhausted()} onNewGame={onNewGame} />);
     passToTheEnd();
     expect(screen.queryByRole('region', { name: 'Match' })).toBeNull();
-    const second = screen.getByRole('group', { name: 'Second bot' });
-    fireEvent.click(within(second).getByRole('radio', { name: 'Hard' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Cowthey Fuzzy, medium' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Michael, hard' }));
     fireEvent.click(screen.getByRole('button', { name: 'New game' }));
     expect(onNewGame).toHaveBeenCalledExactlyOnceWith({
       lineup: [

@@ -615,7 +615,8 @@ body {
   outline-offset: 2px;
 }
 
-.lineup fieldset input[type='radio'] {
+.lineup fieldset input[type='radio'],
+.lineup fieldset input[type='checkbox'] {
   position: absolute;
   inset: 0;
   margin: 0;
@@ -626,25 +627,120 @@ body {
 }
 
 /*
- * Each bot's face beside its level (KUB-43). The face follows from the level, so it changes as
- * the pills are tapped: the picker shows who is coming before Deal.
+ * Who to play (KUB-49): every face at once, a row to each level, like a fighting game's
+ * character select but with up to three picked. A pick is ringed in the tile colour, lifted and
+ * numbered with its seat; once three are picked the rest fade, and cannot be picked. The
+ * checkboxes stay in the page, over each face, for the keyboard and a screen reader.
  */
-.lineup-seat {
+.lineup .roster {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
+  flex-direction: column;
+  gap: 6px;
 }
 
-/* The name over its three pills, so a long one (Lumber Jill Nora) never pushes them apart. */
-.lineup-seat fieldset {
-  justify-content: flex-start;
-}
-
-.lineup-seat legend {
+.lineup .roster legend {
   float: none;
   width: 100%;
-  margin: 0 0 4px;
+  min-width: 0;
+  margin: 0 0 6px;
+  font-size: 15px;
+  text-align: center;
+}
+
+.roster-row {
+  display: grid;
+  grid-template-columns: 3.6em repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 4px;
+  border-radius: 14px;
+  background: rgb(243 239 228 / 0.06);
+}
+
+.roster-level {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.roster-row[data-level='easy'] .roster-level {
+  color: #9fd59a;
+}
+
+.roster-row[data-level='medium'] .roster-level {
+  color: #f2c46b;
+}
+
+.roster-row[data-level='hard'] .roster-level {
+  color: #f08f7e;
+}
+
+.lineup .roster .roster-pick {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 0;
+  padding: 6px 2px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  text-align: center;
+  transition:
+    transform 120ms ease-out,
+    opacity 120ms;
+}
+
+.roster-pick .avatar {
+  width: min(72px, 100%);
+  height: auto;
+}
+
+.roster-name {
+  line-height: 1.15;
+}
+
+.lineup .roster .roster-pick:has(input:checked) {
+  border-color: var(--tile);
+  background: rgb(243 239 228 / 0.14);
+  color: inherit;
+  transform: translateY(-2px);
+}
+
+.lineup .roster .roster-pick:has(input:disabled) {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.roster-seat {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--tile);
+  color: var(--ink-black);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lineup .roster .roster-pick {
+    transition: none;
+  }
+
+  .lineup .roster .roster-pick:has(input:checked) {
+    transform: none;
+  }
 }
 
 .lineup .lineup-hint {
@@ -672,4 +768,10 @@ body {
   font-size: 13px;
   white-space: nowrap;
   opacity: 0.85;
+}
+
+/* Deal with nobody picked to play (KUB-49). */
+.lineup button.primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

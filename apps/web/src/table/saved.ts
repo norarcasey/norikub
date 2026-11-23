@@ -7,7 +7,7 @@ import { tileSchema } from '@norikub/core/tiles';
 import { resumeTurn } from '@norikub/core/turn';
 import { z } from 'zod';
 
-import { whoSchema } from './cast.ts';
+import { levelOf, whoSchema } from './cast.ts';
 import { fitPile } from './pile.ts';
 import { RACK_ROWS, reconcileRows } from './rack.ts';
 import { FIRST_LINEUP, PERSON, botNames, fromGame, seatsFor } from './session.ts';
@@ -61,10 +61,11 @@ const lineupSchema = z
  * Version 3 adds the match (KUB-42). A game saved before it was one game on its own, and
  * resumes as one.
  *
- * Version 4 gives each bot a character (KUB-43). Whatever a game was saved with, its bots
- * resume as their levels' roster says (`seatsFor`) and are renamed for it: a game from before
- * characters, or from the day each seat picked any face, would otherwise show "Medium bot A", or
- * Tatum playing hard, beside the roster's faces.
+ * Version 4 gives each bot a character (KUB-43), and the character sets the level (KUB-49): a
+ * version 4 game resumes against the faces it was saved with, each at its roster level, so a
+ * Tatum saved as hard on the first day of characters plays easy. An older game, saved with
+ * levels only, is given its levels' roster (`seatsFor`). Either way the bots are renamed for
+ * their faces, or the bar would show "Medium bot A" beside Tatum.
  */
 export const savedSchema = z.union([
   z
@@ -101,11 +102,7 @@ export function fromSaved(input: unknown): Session | null {
   const parsed = parse(savedSchema, input);
   if (!parsed.ok) return null;
   const saved = parsed.value;
-  const lineup = seatsFor(
-    saved.version === 1
-      ? FIRST_LINEUP.map((seat) => seat.level)
-      : saved.lineup.map((seat) => (typeof seat === 'string' ? seat : seat.level)),
-  );
+  const lineup = lineupOf(saved);
   const game = named(saved.game, lineup);
   const match = 'match' in saved ? saved.match : newMatch(SINGLE);
   // A lineup or a match for another number of seats is not this game's: one of them was
@@ -139,4 +136,14 @@ function named(game: Game, lineup: Lineup): Game {
       seat === PERSON ? player : { ...player, name: names[seat - 1] ?? player.name },
     ),
   };
+}
+
+/** Who plays the bots' seats in a saved game: its faces where it has them, else its levels'. */
+function lineupOf(saved: Saved): Lineup {
+  if (saved.version === 1) return FIRST_LINEUP;
+  if (saved.version !== 4) return seatsFor(saved.lineup);
+  const faces = saved.lineup.map((seat) => seat.who);
+  // Two seats with one face was never written, but would be two players under one name.
+  if (new Set(faces).size !== faces.length) return seatsFor(saved.lineup.map((s) => s.level));
+  return faces.map((who) => ({ level: levelOf(who), who }));
 }

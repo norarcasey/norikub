@@ -1,3 +1,4 @@
+import { LEVELS } from '@norikub/core/bot';
 import type { Level } from '@norikub/core/bot';
 import { z } from 'zod';
 
@@ -34,13 +35,17 @@ export const CAST_NAMES: Readonly<Record<Who, string>> = {
 };
 
 /**
- * Three characters to each level, in the order they sit down (Nora, 22 Nov 2026, on the
- * ticket): a person picks how many bots and how hard, and the level says who comes. The first
- * version let each seat pick any face at any level; Nora replaced that with this, so Michael is
- * always hard and Tatum always easy, and three bots of one level are always three faces.
+ * Three characters to each level (Nora, 22 Nov 2026, on KUB-43): Michael is always hard and
+ * Tatum always easy, so choosing who is choosing how hard (KUB-49). The order is the picker's,
+ * and the order a game saved with only levels is given them in.
  */
 export const ROSTER: Readonly<Record<Level, readonly [Who, Who, Who]>> = {
   easy: ['tatum', 'edward', 'roscoe'],
   medium: ['erik', 'fuzzy', 'asabo'],
   hard: ['michael', 'nora', 'reilly'],
 };
+
+/** The level a character plays at: the roster row it is in. */
+export function levelOf(who: Who): Level {
+  return LEVELS.find((level) => ROSTER[level].includes(who)) ?? 'medium';
+}

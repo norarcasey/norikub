@@ -74,15 +74,28 @@ describe('a saved session', () => {
     expect(back?.turn?.rack).toEqual(midTurn.turn?.rack);
   });
 
-  it('seats the roster over a game saved when any face could play any level', () => {
+  it('plays each saved face at its own level, whatever level it was saved at (KUB-49)', () => {
     const saved = toSaved(midTurn);
     const free = [
       { level: 'hard', who: 'tatum' },
-      { level: 'easy', who: 'tatum' },
+      { level: 'easy', who: 'erik' },
     ];
     const back = fromSaved(reloaded({ ...saved, lineup: free }));
+    expect(back?.lineup).toEqual([
+      { level: 'easy', who: 'tatum' },
+      { level: 'medium', who: 'erik' },
+    ]);
+    expect(back?.game.players.map((player) => player.name)).toEqual(['You', 'Tatum', 'Erik']);
+  });
+
+  it('gives two seats saved with one face their levels’ roster instead', () => {
+    const saved = toSaved(midTurn);
+    const twins = [
+      { level: 'hard', who: 'tatum' },
+      { level: 'easy', who: 'tatum' },
+    ];
+    const back = fromSaved(reloaded({ ...saved, lineup: twins }));
     expect(back?.lineup).toEqual(seatsFor(['hard', 'easy']));
-    expect(back?.game.players.map((player) => player.name)).toEqual(['You', 'Michael', 'Tatum']);
   });
 
   it('resumes a game saved before bots had levels against the medium bot it was playing', () => {

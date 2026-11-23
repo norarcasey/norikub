@@ -27,52 +27,59 @@ it('hands every change to be saved before it is shown (invariant 3)', () => {
   expect(screen.getByRole('status').textContent).not.toBe('');
 });
 
-describe('picking the bots (KUB-41)', () => {
-  it('deals a new game mid-game against the bots picked, and saves it first', () => {
+describe('picking the bots (KUB-41, KUB-49)', () => {
+  const pick = (scope: HTMLElement, name: string) =>
+    fireEvent.click(within(scope).getByRole('checkbox', { name }));
+
+  it('deals a new game mid-game against the faces picked, and saves it first', () => {
     const onSave = vi.fn();
     render(<App initial={newSession(7)} onSave={onSave} />);
     fireEvent.click(screen.getByRole('button', { name: 'New game' }));
     const dialog = screen.getByRole('dialog', { name: 'New game' });
-    const first = within(dialog).getByRole('group', { name: 'First bot' });
-    const second = within(dialog).getByRole('group', { name: 'Second bot' });
-    fireEvent.click(within(first).getByRole('radio', { name: 'Hard' }));
-    fireEvent.click(within(second).getByRole('radio', { name: 'Hard' }));
+    // The last game's Erik and Cowthey Fuzzy come in picked; swap Erik for Michael.
+    pick(dialog, 'Erik, medium');
+    pick(dialog, 'Michael, hard');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Deal a new game' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(onSave).toHaveBeenCalledOnce();
-    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ lineup: seatsFor(['hard', 'hard']) });
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({
+      lineup: [
+        { level: 'medium', who: 'fuzzy' },
+        { level: 'hard', who: 'michael' },
+      ],
+    });
     const opponents = screen.getByRole('list', { name: 'Opponents' }).textContent;
+    expect(opponents).toContain('Cowthey Fuzzy');
     expect(opponents).toContain('Michael');
-    expect(opponents).toContain('Lumber Jill Nora');
   });
 
-  it('seats the next of each level’s three characters, and shows who before the deal (KUB-43)', () => {
+  it('shows all nine faces, seats up to three in the order picked, and deals none', () => {
     const onSave = vi.fn();
     render(<App initial={newSession(7)} onSave={onSave} />);
     fireEvent.click(screen.getByRole('button', { name: 'New game' }));
     const dialog = screen.getByRole('dialog', { name: 'New game' });
-    fireEvent.click(
-      within(within(dialog).getByRole('group', { name: 'Bots' })).getByRole('radio', {
-        name: '3',
-      }),
+    expect(within(dialog).getAllByRole('checkbox')).toHaveLength(9);
+    pick(dialog, 'Erik, medium');
+    pick(dialog, 'Cowthey Fuzzy, medium');
+    const deal = within(dialog).getByRole('button', { name: 'Deal a new game' });
+    expect(deal).toHaveProperty('disabled', true);
+    pick(dialog, 'Reilly, hard');
+    pick(dialog, 'Tatum, easy');
+    pick(dialog, 'Asa & Bo, medium');
+    // Three picked: the other six cannot be.
+    expect(within(dialog).getByRole('checkbox', { name: 'Roscoe, easy' })).toHaveProperty(
+      'disabled',
+      true,
     );
-    for (const seat of ['First bot', 'Second bot', 'Third bot']) {
-      const group = within(dialog).getByRole('group', { name: seat });
-      fireEvent.click(within(group).getByRole('radio', { name: 'Hard' }));
-    }
-    const third = within(dialog).getByRole('group', { name: 'Third bot' });
-    expect(within(third).getByRole('group', { name: 'Reilly' })).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Deal a new game' }));
+    fireEvent.click(deal);
     expect(onSave.mock.calls[0]?.[0]).toMatchObject({
       lineup: [
-        { level: 'hard', who: 'michael' },
-        { level: 'hard', who: 'nora' },
         { level: 'hard', who: 'reilly' },
+        { level: 'easy', who: 'tatum' },
+        { level: 'medium', who: 'asabo' },
       ],
     });
     const bar = screen.getByRole('list', { name: 'Opponents' });
-    expect(bar.textContent).toContain('Michael');
-    expect(bar.textContent).toContain('Lumber Jill Nora');
     expect(bar.textContent).toContain('Reilly');
     expect(bar.querySelectorAll('img.avatar')).toHaveLength(3);
   });
@@ -111,21 +118,18 @@ describe('the landing (KUB-42)', () => {
     const onSave = vi.fn();
     render(<App onSave={onSave} account={null} friends={null} />);
     fireEvent.click(screen.getByRole('button', { name: 'Set up a game' }));
-    fireEvent.click(
-      within(screen.getByRole('group', { name: 'Bots' })).getByRole('radio', { name: '3' }),
-    );
-    fireEvent.click(
-      within(screen.getByRole('group', { name: 'Third bot' })).getByRole('radio', {
-        name: 'Easy',
-      }),
-    );
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Roscoe, easy' }));
     fireEvent.click(screen.getByRole('radio', { name: 'A few games' }));
     fireEvent.click(
       within(screen.getByRole('group', { name: 'Games' })).getByRole('radio', { name: '5' }),
     );
     fireEvent.click(screen.getByRole('button', { name: 'Deal' }));
     expect(onSave.mock.calls[0]?.[0]).toMatchObject({
-      lineup: seatsFor(['medium', 'medium', 'easy']),
+      lineup: [
+        { level: 'medium', who: 'erik' },
+        { level: 'medium', who: 'fuzzy' },
+        { level: 'easy', who: 'roscoe' },
+      ],
       match: { format: { kind: 'games', games: 5 }, played: [] },
     });
     expect(screen.getByText('Game 1 of 5')).toBeTruthy();

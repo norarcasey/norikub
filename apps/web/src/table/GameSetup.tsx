@@ -5,19 +5,17 @@ import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { Avatar } from './Avatar.tsx';
-import { CAST_NAMES } from './cast.ts';
-import { seatsFor } from './session.ts';
+import { CAST_NAMES, ROSTER, levelOf } from './cast.ts';
+import type { Who } from './cast.ts';
 import type { Lineup, Setup } from './session.ts';
 
 const LABELS: Readonly<Record<Level, string>> = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
 
 const HINTS: Readonly<Record<Level, string>> = {
-  easy: 'Lays its own sets, never builds on yours.',
-  medium: 'Adds to the table, borrows the odd spare tile.',
-  hard: 'Reworks the whole table, as you can.',
+  easy: 'Easy lays its own sets, never builds on yours.',
+  medium: 'Medium adds to the table, borrows the odd spare tile.',
+  hard: 'Hard reworks the whole table, as you can.',
 };
-
-const SEATS = ['First bot', 'Second bot', 'Third bot'] as const;
 
 /**
  * The lengths offered (KUB-42). A won game against two bots scores about 30 to 80 here (the
@@ -35,10 +33,13 @@ const LENGTHS: readonly { readonly kind: Length; readonly label: string }[] = [
   { kind: 'points', label: 'To a score' },
 ];
 
+/** Most bots a table seats: four seats, one of them the person's. */
+const MOST = 3;
+
 /**
- * Setting up a sitting against the bots (KUB-41, KUB-42, KUB-43): one to three bots and how
- * well each plays, which says who it is, then one game, a number of games, or games until a
- * running total reaches a score. It starts on the setup just played, so the same again is one tap.
+ * Setting up a sitting against the bots (KUB-41, KUB-42, KUB-49): who to play, chosen from every
+ * face at once, then one game, a number of games, or games until a running total reaches a
+ * score. It starts on the setup just played, so the same again is one tap.
  *
  * The number of games and the score are kept while another length is picked, so trying "One
  * game" and coming back does not lose a 7.
@@ -53,23 +54,23 @@ export function GameSetup({
   readonly action: string;
   readonly onDeal: (setup: Setup) => void;
 }) {
-  const [lineup, setLineup] = useState<Lineup>(initial.lineup);
+  const [chosen, setChosen] = useState<readonly Who[]>(initial.lineup.map((seat) => seat.who));
   const [length, setLength] = useState<Length>(initial.format.kind);
   const [games, setGames] = useState(initial.format.kind === 'games' ? initial.format.games : 3);
   const [target, setTarget] = useState(
     initial.format.kind === 'points' ? initial.format.target : 200,
   );
   const id = useId();
-  const levels = lineup.map((seat) => seat.level);
-  // Who sits follows from the levels (`seatsFor`), so a change of level can change a face
-  // in another seat: a second hard bot is Lumber Jill Nora wherever the first one sits.
-  const pick = (seat: number, level: Level) =>
-    setLineup(seatsFor(levels.map((current, i) => (i === seat ? level : current))));
-  // A bot added plays at the level of the one before it: most tables are all one level.
-  const count = (bots: number) =>
-    setLineup(
-      seatsFor(Array.from({ length: bots }, (_, i) => levels[i] ?? levels.at(-1) ?? 'medium')),
+  // Seats in the order chosen; un-choosing one moves the later ones up a seat.
+  const toggle = (who: Who) =>
+    setChosen(
+      chosen.includes(who)
+        ? chosen.filter((other) => other !== who)
+        : chosen.length < MOST
+          ? [...chosen, who]
+          : chosen,
     );
+  const lineup: Lineup = chosen.map((who) => ({ level: levelOf(who), who }));
   const format: MatchFormat =
     length === 'games'
       ? { kind: 'games', games }
@@ -78,27 +79,44 @@ export function GameSetup({
         : { kind: 'single' };
   return (
     <div className="lineup">
-      <Choices
-        legend="Bots"
-        name={`${id}-count`}
-        options={SEATS.map((_, i) => ({ value: i + 1, label: String(i + 1) }))}
-        value={lineup.length}
-        onPick={count}
-      />
-      {lineup.map((bot, seat) => (
-        <div key={seat} className="lineup-seat" role="group" aria-label={SEATS[seat]}>
-          <Avatar who={bot.who} size={44} />
-          <Choices
-            legend={CAST_NAMES[bot.who]}
-            name={`${id}-${seat}`}
-            options={LEVELS.map((option) => ({ value: option, label: LABELS[option] }))}
-            value={bot.level}
-            onPick={(option) => pick(seat, option)}
-          />
-        </div>
-      ))}
-      <p className="lineup-hint">
-        {[...new Set(lineup.map((bot) => bot.level))].map((level) => HINTS[level]).join(' ')}
+      <fieldset className="roster">
+        <legend>Who are you playing?</legend>
+        {LEVELS.map((level) => (
+          <div key={level} className="roster-row" data-level={level}>
+            <span className="roster-level">{LABELS[level]}</span>
+            {ROSTER[level].map((who) => {
+              const seat = chosen.indexOf(who);
+              const full = seat < 0 && chosen.length >= MOST;
+              return (
+                <label key={who} className="roster-pick" data-chosen={seat >= 0 || undefined}>
+                  <input
+                    type="checkbox"
+                    aria-label={`${CAST_NAMES[who]}, ${LABELS[level].toLowerCase()}`}
+                    checked={seat >= 0}
+                    disabled={full}
+                    onChange={() => toggle(who)}
+                  />
+                  <Avatar who={who} size={72} />
+                  <span className="roster-name">{CAST_NAMES[who]}</span>
+                  {seat >= 0 ? (
+                    <span className="roster-seat" aria-hidden="true">
+                      {seat + 1}
+                    </span>
+                  ) : null}
+                </label>
+              );
+            })}
+          </div>
+        ))}
+      </fieldset>
+      <p className="lineup-hint" aria-live="polite">
+        {chosen.length === 0
+          ? 'Pick one to three to play against.'
+          : `Against ${chosen.map((who) => CAST_NAMES[who]).join(', ')}. ${[
+              ...new Set(lineup.map((bot) => bot.level)),
+            ]
+              .map((level) => HINTS[level])
+              .join(' ')}`}
       </p>
       <Choices
         legend="Play"
@@ -125,7 +143,12 @@ export function GameSetup({
           onPick={setTarget}
         />
       )}
-      <button type="button" className="primary" onClick={() => onDeal({ lineup, format })}>
+      <button
+        type="button"
+        className="primary"
+        disabled={lineup.length === 0}
+        onClick={() => onDeal({ lineup, format })}
+      >
         {action}
       </button>
     </div>
