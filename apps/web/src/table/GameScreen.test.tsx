@@ -261,6 +261,7 @@ function BotsFirstHarness() {
 }
 
 const status = () => screen.getByRole('status').textContent;
+const PLAYED = 'P1 laid down red 4–6 and added the orange 9 to orange 9–12.';
 const opponents = () => screen.getByRole('list', { name: 'Opponents' }).textContent;
 const wait = (ms: number) => {
   act(() => {
@@ -274,7 +275,8 @@ describe('a bot turn on screen', () => {
 
   it('plays the bot’s moves one at a time, then the draw, then hands the turn over', () => {
     render(<BotsFirstHarness />);
-    expect(status()).toBe('P1 plays the red 4.');
+    // The caption is the turn's result from its first tile (KUB-51), not each tile in turn.
+    expect(status()).toBe(PLAYED);
     expect(opponents()).toContain('P1: 4 tiles');
     expect(screen.queryByRole('group', { name: 'Set 2' })?.textContent).toContain('4');
     expect(screen.queryByRole('button', { name: 'End turn' })).toBeNull();
@@ -283,15 +285,15 @@ describe('a bot turn on screen', () => {
     expect(pool()[0]?.getAttribute('aria-disabled')).toBe('true');
 
     wait(500);
-    expect(status()).toBe('P1 plays the red 5.');
+    expect(status()).toBe(PLAYED);
     wait(500);
-    expect(status()).toBe('P1 plays the red 6.');
+    expect(status()).toBe(PLAYED);
     wait(500);
-    expect(status()).toBe('P1 plays the orange 9.');
+    expect(status()).toBe(PLAYED);
     expect(opponents()).toContain('P1: 1 tiles');
     wait(500);
-    expect(status()).toBe('P1 played 4 tiles.');
-    wait(800);
+    expect(status()).toBe(PLAYED);
+    wait(1800);
     // The tile leaves the pool's last place and is in flight: the counts are still the old ones.
     expect(status()).toBe('P2 draws a tile.');
     expect(opponents()).toContain('P2: 1 tiles');
@@ -305,7 +307,7 @@ describe('a bot turn on screen', () => {
     wait(400);
     expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
     expect(screen.getByRole('button', { name: 'End turn' })).toBeDefined();
-    expect(status()).toBe('P1 played 4 tiles. P2 drew a tile.');
+    expect(status()).toBe(`${PLAYED} P2 drew a tile.`);
   });
 
   it('shows the person’s own draw landing in the rack before the bots play', () => {
@@ -347,7 +349,7 @@ describe('a bot turn on screen', () => {
     expect(screen.getByRole('button', { name: 'End turn' })).toBeDefined();
     expect(screen.getByRole('group', { name: 'Set 1' }).textContent).toContain('9');
     wait(5000);
-    expect(status()).toBe('P1 played 4 tiles. P2 drew a tile.');
+    expect(status()).toBe(`${PLAYED} P2 drew a tile.`);
   });
 });
 

@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { takeBotTurn } from '@norikub/core/bot';
 import type { Bot, BotTurn } from '@norikub/core/bot';
 import type { Game } from '@norikub/core/game';
+import { summarizeTurn } from '@norikub/core/summary';
 
-import { layout } from '../../../../packages/core/src/fixtures.test-helpers.ts';
+import { layout, t } from '../../../../packages/core/src/fixtures.test-helpers.ts';
 import { dealPile, fitPile, pileSpot, takeFromPile } from './pile.ts';
 import { framesOf } from './replay.ts';
 import { drawTile, finishTurn, fromGame, moveTile, newSession } from './session.ts';
@@ -103,7 +104,17 @@ describe('the frames of a bot turn', () => {
     ]);
     expect(frames.map((f) => f.counts[1])).toEqual([4, 3, 2, 1, 1]);
     expect(frames.at(-1)?.table).toBe(result.game.table);
-    expect(frames.at(-1)?.step).toEqual({ kind: 'done', played: 4 });
+    const summary = summarizeTurn(before.table, result.game.table);
+    expect(summary.placements.map((p) => p.tiles.length)).toEqual([1, 3]);
+    // Every frame of the play carries the turn's result, so its caption can say it throughout.
+    expect(frames.map((f) => (f.step.kind === 'drawing' ? null : f.step))).toEqual([
+      ...['red-4-a', 'red-5-a', 'red-6-a', 'orange-9-a'].map((id) => ({
+        kind: 'placed',
+        tile: t(id),
+        summary,
+      })),
+      { kind: 'done', summary },
+    ]);
     expect(frames.every((f) => f.name === 'P1' && f.seat === 1)).toBe(true);
   });
 

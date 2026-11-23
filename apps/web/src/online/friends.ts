@@ -1,4 +1,5 @@
 import type { TableClientMessage, TableMessage } from '@norikub/core/protocol';
+import { summarizeTurn } from '@norikub/core/summary';
 import type { Refusal, TableView } from '@norikub/core/table';
 import { rackPenalty } from '@norikub/core/tiles';
 import type { Tile } from '@norikub/core/tiles';
@@ -134,8 +135,8 @@ function viewed(state: Friends, table: TableView): Friends {
       }
     } else if (turnOver && was.current !== view.seat) {
       const began = was.turn?.began ?? was.table;
-      const played = view.table.flat().length - began.flat().length;
-      notes.push({ kind: 'played', name: table.names[was.current] ?? '', played });
+      const summary = summarizeTurn(began, view.table);
+      notes.push({ kind: 'played', name: table.names[was.current] ?? '', summary });
     }
     // The turn that starts here is this seat's: a take-back returns tiles to where they are now.
     if (turnOver && view.current === view.seat) startRows = rows;

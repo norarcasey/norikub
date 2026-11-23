@@ -10,6 +10,7 @@ import {
   tableViewFor,
 } from '../../../../packages/core/src/table.ts';
 import type { Table } from '../../../../packages/core/src/table.ts';
+import { noteText } from '../table/messages.ts';
 import {
   friendsBoard,
   newFriends,
@@ -218,7 +219,7 @@ describe('a page watching another seat play', () => {
     host.hear(0, { type: 'move', move: { kind: 'to-set', tileId: 'red-3-a', set: 1 } });
     host.hear(0, { type: 'end-turn' });
     watcher = host.deliver(1, watcher);
-    expect(watcher.notes).toEqual([{ kind: 'played', name: 'Ana', played: 3 }]);
+    expect(watcher.notes.map(noteText)).toEqual(['Ana laid down red 1–3.']);
     expect(friendsBoard(watcher)?.began).not.toBeNull();
 
     let other = host.deliver(2, newFriends());

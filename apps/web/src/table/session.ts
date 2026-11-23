@@ -4,6 +4,8 @@ import { newGame } from '@norikub/core/game';
 import type { Game } from '@norikub/core/game';
 import { SINGLE, newMatch, nextGameOf, standing } from '@norikub/core/match';
 import type { Match, MatchFormat } from '@norikub/core/match';
+import { summarizeTurn } from '@norikub/core/summary';
+import type { TurnSummary } from '@norikub/core/summary';
 import type { Tile } from '@norikub/core/tiles';
 import { drawInstead, endTurn, move, startTurn, takeBack } from '@norikub/core/turn';
 import type { Refusal } from '@norikub/core/table';
@@ -80,7 +82,7 @@ export type Note =
   | { readonly kind: 'refused'; readonly refusal: MoveRefusal }
   | { readonly kind: 'fault'; readonly fault: TurnFault }
   | { readonly kind: 'drew'; readonly tile: Tile | null }
-  | { readonly kind: 'played'; readonly name: string; readonly played: number }
+  | { readonly kind: 'played'; readonly name: string; readonly summary: TurnSummary }
   | { readonly kind: 'host'; readonly refusal: Refusal };
 
 /**
@@ -193,16 +195,14 @@ function playBots(
   let pile = dealt;
   while (current.status.kind === 'playing' && current.current !== PERSON) {
     const seat = current.current;
-    const before = current.players[seat]?.rack.length ?? 0;
     const result = takeBotTurn(current, botFor(levelAt(lineup, seat)));
     const turnFrames = framesOf(current, result, pile);
     frames.push(...turnFrames);
     pile = turnFrames.at(-1)?.pile ?? pile;
     const next = result.game;
-    const after = next.players[seat]?.rack.length ?? 0;
-    // A bot that draws ends with one tile more, and has played none.
-    const played = Math.max(0, before - after);
-    notes.push({ kind: 'played', name: current.players[seat]?.name ?? '', played });
+    // A bot that draws leaves the table as it was: a summary with nothing played.
+    const summary = summarizeTurn(current.table, next.table);
+    notes.push({ kind: 'played', name: current.players[seat]?.name ?? '', summary });
     current = next;
   }
   return { game: current, notes, frames, pile };

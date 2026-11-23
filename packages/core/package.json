@@ -11,6 +11,7 @@
     "./protocol": "./src/protocol.ts",
     "./random": "./src/random.ts",
     "./sets": "./src/sets.ts",
+    "./summary": "./src/summary.ts",
     "./table": "./src/table.ts",
     "./tiles": "./src/tiles.ts",
     "./turn": "./src/turn.ts",

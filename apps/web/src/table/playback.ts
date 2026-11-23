@@ -5,15 +5,17 @@ import type { Frame } from './replay.ts';
 // How long each frame stays up, by what it shows. 500 ms a tile is the middle of the 400–600
 // ms the ticket started from: slow enough to see where each tile lands, quick enough that a
 // bot laying down a dozen tiles takes about six seconds. The end of a turn and a pass hold
-// longer, because nothing moves in them and the caption is the thing to read. A draw is the
-// flight (`drawing`, which FLIGHT_MS fills) and a moment with the tile landed (`drew`).
+// longer, because nothing moves in them and the caption is the thing to read. The end of a
+// play holds longest: its caption is the whole turn's result (KUB-51), a sentence to
+// read rather than a word to glance at, and a one-tile play would otherwise show it for 1.3 s. A draw is the flight
+// (`drawing`, which FLIGHT_MS fills) and a moment with the tile landed (`drew`).
 export const FLIGHT_MS = 600;
 const HOLD: Record<Frame['step']['kind'], number> = {
   placed: 500,
   drawing: FLIGHT_MS,
   drew: 400,
   passed: 900,
-  done: 800,
+  done: 1800,
 };
 
 export type Playback = {

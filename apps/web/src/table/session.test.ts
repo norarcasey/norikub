@@ -172,10 +172,11 @@ describe('a session', () => {
     const next = finishTurn(s);
     expect(next.game.current).toBe(0);
     expect(next.turn?.rack.map((tile) => tile.id)).toEqual(['black-2-a']);
-    // Neither bot can play from these racks, so each draws: played 0, never -1.
+    // Neither bot can play from these racks, so each draws: nothing played.
+    const drew = { placements: [], reworked: 0 };
     expect(next.notes).toEqual([
-      { kind: 'played', name: 'P1', played: 0 },
-      { kind: 'played', name: 'P2', played: 0 },
+      { kind: 'played', name: 'P1', summary: drew },
+      { kind: 'played', name: 'P2', summary: drew },
     ]);
   });
 

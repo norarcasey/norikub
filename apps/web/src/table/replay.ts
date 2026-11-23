@@ -1,5 +1,7 @@
 import type { BotTurn } from '@norikub/core/bot';
 import type { Game } from '@norikub/core/game';
+import { summarizeTurn } from '@norikub/core/summary';
+import type { TurnSummary } from '@norikub/core/summary';
 import type { Tile } from '@norikub/core/tiles';
 import { move, startTurn } from '@norikub/core/turn';
 
@@ -24,16 +26,21 @@ export type Frame = {
 };
 
 /**
+ * A bot's play is a frame for each tile it moves and one for the table it ends on, every one
+ * carrying the turn's `summary`: what the table is like when it is done (KUB-51). The caption
+ * says the result while the tiles move, because the order of a rework's moves tells the
+ * person nothing.
+ *
  * A draw is two frames: `drawing`, while a face-down tile travels from its place in the pool
  * (`pick`) and the counts are still those before it, then `drew`, once it has landed. `face`
  * is the tile drawn, and is only ever set when the person drew it.
  */
 export type Step =
-  | { readonly kind: 'placed'; readonly tile: Tile }
+  | { readonly kind: 'placed'; readonly tile: Tile; readonly summary: TurnSummary }
   | { readonly kind: 'drawing'; readonly pick: number; readonly face: Tile | null }
   | { readonly kind: 'drew'; readonly face: Tile | null }
   | { readonly kind: 'passed' }
-  | { readonly kind: 'done'; readonly played: number };
+  | { readonly kind: 'done'; readonly summary: TurnSummary };
 
 const counts = (game: Game): number[] => game.players.map((player) => player.rack.length);
 
@@ -88,6 +95,7 @@ export function framesOf(before: Game, result: BotTurn, pile: Pile): Frame[] {
   const frames: Frame[] = [];
   const { proposal } = result;
   if (proposal.kind === 'play' && result.accepted) {
+    const summary = summarizeTurn(before.table, result.game.table);
     let turn = startTurn(before);
     for (const m of proposal.moves) {
       const moved = move(turn, m);
@@ -103,17 +111,16 @@ export function framesOf(before: Game, result: BotTurn, pile: Pile): Frame[] {
         table: turn.table,
         counts: now,
         pile,
-        step: { kind: 'placed', tile },
+        step: { kind: 'placed', tile, summary },
       });
     }
-    const played = (before.players[seat]?.rack.length ?? 0) - turn.rack.length;
     frames.push({
       seat,
       name,
       table: result.game.table,
       counts: counts(result.game),
       pile,
-      step: { kind: 'done', played },
+      step: { kind: 'done', summary },
     });
     return frames;
   }

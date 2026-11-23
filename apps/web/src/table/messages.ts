@@ -1,5 +1,6 @@
 import type { Status } from '@norikub/core/game';
 import type { MatchFormat, Standing } from '@norikub/core/match';
+import type { Placement, SetShape, TurnSummary } from '@norikub/core/summary';
 import type { Refusal, TableRefusal } from '@norikub/core/table';
 import type { Tile } from '@norikub/core/tiles';
 import type { MoveRefusal, TurnFault } from '@norikub/core/turn';
@@ -58,9 +59,7 @@ export function noteText(note: Note): string {
         ? 'The pool is empty, so you passed.'
         : `You drew the ${tileName(note.tile)}.`;
     case 'played':
-      return note.played === 0
-        ? `${note.name} drew a tile.`
-        : `${note.name} played ${note.played} tile${note.played === 1 ? '' : 's'}.`;
+      return turnText(note.name, note.summary);
     case 'host':
       return hostRefusalText(note.refusal);
   }
@@ -109,7 +108,7 @@ export function tableRefusalText(refusal: TableRefusal): string {
 export function frameText(frame: Frame, you: number): string {
   switch (frame.step.kind) {
     case 'placed':
-      return `${frame.name} plays the ${tileName(frame.step.tile)}.`;
+      return turnText(frame.name, frame.step.summary);
     case 'drawing':
       return frame.seat === you ? 'You draw a tile.' : `${frame.name} draws a tile.`;
     case 'drew':
@@ -121,8 +120,65 @@ export function frameText(frame: Frame, you: number): string {
         ? 'The pool is empty, so you passed.'
         : `The pool is empty, so ${frame.name} passed.`;
     case 'done':
-      return `${frame.name} played ${frame.step.played} tile${frame.step.played === 1 ? '' : 's'}.`;
+      return turnText(frame.name, frame.step.summary);
   }
+}
+
+// Past two sets the sentence no longer fits the status line, and the table shows the rest.
+const NAMED_PLACEMENTS = 2;
+// "the red 4, red 5 and red 6" still reads; a fourth tile is better counted.
+const NAMED_TILES = 3;
+
+/**
+ * Another player's turn as its result (KUB-51): "Tatum laid down red 4–6 and added the orange
+ * 9 to orange 9–12." Sets laid down come before sets added to, the way a person would tell
+ * it. A turn that played nothing drew.
+ *
+ * Short on purpose: the status line is two lines tall, and on a 390 px phone, measured in the
+ * dev build at 15 px system-ui, it is about 275 px wide beside Skip, so 520 px of text. "a run
+ * of red 4 to 6 and added the orange 9 to a run of orange 9 to 12" measured 571 px; the
+ * wording here, 432.
+ */
+export function turnText(name: string, summary: TurnSummary): string {
+  const { placements, reworked } = summary;
+  if (placements.length === 0) return `${name} drew a tile.`;
+  const clauses =
+    placements.length <= NAMED_PLACEMENTS
+      ? [...placements].sort((a, b) => Number(b.fresh) - Number(a.fresh)).map(placementText)
+      : [`played ${tileCount(placements)} tiles into ${placements.length} sets`];
+  const rework = reworked > 0 ? [`reworked ${reworked} set${reworked === 1 ? '' : 's'}`] : [];
+  return `${name} ${listed([...rework, ...clauses])}.`;
+}
+
+function placementText(placement: Placement): string {
+  const { into, tiles } = placement;
+  if (placement.fresh) {
+    return `laid down ${into.kind === 'group' ? groupText(into) : shapeText(into)}`;
+  }
+  const what =
+    tiles.length <= NAMED_TILES ? `the ${listed(tiles.map(tileName))}` : `${tiles.length} tiles`;
+  return `added ${what} to ${shapeText(into)}`;
+}
+
+/** A set as it is added to: "orange 9–12", "the 7s". */
+export function shapeText(shape: SetShape): string {
+  switch (shape.kind) {
+    case 'run':
+      return `${shape.colour} ${shape.low}–${shape.high}`;
+    case 'group':
+      return `the ${shape.value}s`;
+    case 'other':
+      return 'a set';
+  }
+}
+
+/** A group as it is laid down: "three 7s". */
+function groupText(group: Extract<SetShape, { kind: 'group' }>): string {
+  return `${group.size === 4 ? 'four' : 'three'} ${group.value}s`;
+}
+
+function tileCount(placements: readonly Placement[]): number {
+  return placements.reduce((sum, placement) => sum + placement.tiles.length, 0);
 }
 
 type Over = Extract<Status, { kind: 'over' }>;
