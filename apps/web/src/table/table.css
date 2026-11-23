@@ -61,7 +61,15 @@ body {
 
 .opponents {
   display: flex;
-  gap: 16px;
+  /*
+   * A friends' table on a phone wraps its opponents onto a second row (KUB-45): three
+   * friends with long names in one row ran the bar to 661px on a 360px screen, and the whole
+   * game scrolled sideways under the rack. A bot shows only its face there, so it still fits
+   * on one row.
+   */
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 6px 16px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -513,7 +521,7 @@ body {
  */
 @media (max-width: 600px) {
   .opponents {
-    gap: 10px;
+    column-gap: 10px;
   }
 
   .opponents li[data-face] .opponent-name {
@@ -525,7 +533,7 @@ body {
     white-space: nowrap;
   }
 
-  .opponents li {
+  .opponents li[data-face] {
     white-space: nowrap;
   }
 }
