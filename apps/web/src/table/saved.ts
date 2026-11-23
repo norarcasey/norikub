@@ -121,6 +121,7 @@ export function fromSaved(input: unknown): Session | null {
     rows: reconcileRows(saved.rows, turn.rack, saved.startRows),
     startRows: reconcileRows(saved.startRows, turn.start.players[PERSON]?.rack ?? []),
     notes: [],
+    round: [],
     replay: [],
     pile: fitPile(saved.pile, game.pool.length),
     ...sitting,

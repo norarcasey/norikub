@@ -85,6 +85,9 @@ export type Note =
   | { readonly kind: 'played'; readonly name: string; readonly summary: TurnSummary }
   | { readonly kind: 'host'; readonly refusal: Refusal };
 
+/** Another player's turn, as a note. */
+export type Played = Extract<Note, { readonly kind: 'played' }>;
+
 /**
  * The screen's whole state: the game, the person's turn in progress over it (none once the
  * game is over), how they have arranged their rack, and what to tell them. `startRows` is the
@@ -103,6 +106,12 @@ export type Session = {
   readonly rows: RackRows;
   readonly startRows: RackRows;
   readonly notes: readonly Note[];
+  /**
+   * The bots' turns since the person's last one, kept until the person ends their turn
+   * (KUB-53). `notes` lets them go at the first tile moved, and on a phone it has only two
+   * lines for them; this is what the status line opens in full.
+   */
+  readonly round: readonly Played[];
   readonly replay: readonly Frame[];
   /** The face-down tiles' spots, parallel to `game.pool` (KUB-25). */
   readonly pile: Pile;
@@ -174,6 +183,7 @@ export function fromGame(
     rows: laidOut,
     startRows: laidOut,
     notes: [...notes, ...played.notes],
+    round: played.notes,
     replay: [...lead, ...played.frames],
     pile: played.pile,
     lineup,
@@ -189,8 +199,8 @@ function playBots(
   game: Game,
   dealt: Pile,
   lineup: Lineup,
-): { game: Game; notes: Note[]; frames: Frame[]; pile: Pile } {
-  const notes: Note[] = [];
+): { game: Game; notes: Played[]; frames: Frame[]; pile: Pile } {
+  const notes: Played[] = [];
   const frames: Frame[] = [];
   let current = game;
   let pile = dealt;

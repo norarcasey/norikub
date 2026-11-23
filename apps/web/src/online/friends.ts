@@ -16,7 +16,7 @@ import { dealRows, placeOnRack, reconcileRows } from '../table/rack.ts';
 import type { RackRows } from '../table/rack.ts';
 import type { Frame } from '../table/replay.ts';
 import { moveGroup } from '../table/session.ts';
-import type { Note, Placed, RackSpot } from '../table/session.ts';
+import type { Note, Placed, Played, RackSpot } from '../table/session.ts';
 
 /**
  * One device's side of a friends' table (`docs/online.md`): the last view the host sent, and
@@ -396,6 +396,9 @@ export function friendsBoard(state: Friends): Board | null {
     }),
     rows: state.rows,
     notes: state.notes,
+    // The host tells each turn as it ends, and the next view lets it go: a friends' table has
+    // no round to keep yet. The other players' turns are KUB-36's to keep, with its bots.
+    round: state.notes.filter((note): note is Played => note.kind === 'played'),
     replay: state.replay,
     away: counts.map((_, seat) => isAway(state, seat)),
     faces: counts.map(() => null),

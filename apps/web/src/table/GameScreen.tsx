@@ -329,6 +329,8 @@ export function TableScreen({
   // The tiles tapped, in the order tapped: one to move like a drop, or several to send
   // somewhere together (KUB-2).
   const [selected, setSelected] = useState<readonly string[]>([]);
+  // The round the log is open on. A new round, from the person's next turn, closes it.
+  const [roundFor, setRoundFor] = useState<Board['round'] | null>(null);
   // While a bot's turn plays back, the screen shows the frame and takes no moves: the game
   // underneath is already at the person's turn, and a move made now would be made on a table
   // they cannot see.
@@ -359,7 +361,11 @@ export function TableScreen({
   };
 
   const live: TileEvents = {
-    onPointerDown: drag.onPointerDown,
+    // A tile taken up closes the round's log: the person has moved on to their own turn.
+    onPointerDown: (...args) => {
+      setRoundFor(null);
+      drag.onPointerDown(...args);
+    },
     onPointerMove: drag.onPointerMove,
     onPointerUp: drag.onPointerUp,
     onPointerCancel: drag.onPointerCancel,
@@ -462,6 +468,26 @@ export function TableScreen({
           },
         ],
   );
+
+  const line =
+    watching !== null
+      ? frameText(watching, board.you)
+      : drag.drag !== null && refusal !== null
+        ? refusalText(refusal)
+        : split !== null && held !== undefined
+          ? splitText(held)
+          : drag.drag === null && selected.length > 1
+            ? pickedText(selected.length)
+            : [
+                ...notes.map(noteText),
+                ...(!mine && status.kind === 'playing'
+                  ? [`${board.names[board.current] ?? 'Another player'} is playing.`]
+                  : []),
+              ].join(' ');
+  // Only the person's own line opens the round: while a tile is held or a turn plays back, the
+  // line is about that, and the round is not yet the whole story.
+  const opensRound = board.round.length > 0 && watching === null && drag.drag === null;
+  const roundOpen = opensRound && roundFor === board.round;
 
   return (
     <div className="game">
@@ -579,22 +605,23 @@ export function TableScreen({
       {/* The status line and the actions share a row, so the buttons cost the table and the
           rack no room of their own (KUB-24). End turn comes last, where the thumb is. */}
       <div className="turn-bar">
-        <p className="notes" role="status">
-          {watching !== null
-            ? frameText(watching, board.you)
-            : drag.drag !== null && refusal !== null
-              ? refusalText(refusal)
-              : split !== null && held !== undefined
-                ? splitText(held)
-                : drag.drag === null && selected.length > 1
-                  ? pickedText(selected.length)
-                  : [
-                      ...notes.map(noteText),
-                      ...(!mine && status.kind === 'playing'
-                        ? [`${board.names[board.current] ?? 'Another player'} is playing.`]
-                        : []),
-                    ].join(' ')}
-        </p>
+        {/* The status line has two lines and no more (KUB-2), which on a phone holds one bot's
+            turn at most. With the bots' turns to tell, a tap on it opens them in full, over the
+            table, so nothing under a finger moves (KUB-53). */}
+        <div className="notes-line">
+          <p className="notes" role="status">
+            {line === '' && opensRound ? 'Last round ›' : line}
+          </p>
+          {opensRound && (
+            <button
+              type="button"
+              className="notes-open"
+              aria-label="What the others did last round"
+              aria-expanded={roundOpen}
+              onClick={() => setRoundFor(roundOpen ? null : board.round)}
+            />
+          )}
+        </div>
 
         {watching !== null ? (
           <div className="actions">
@@ -617,6 +644,7 @@ export function TableScreen({
             </button>
           </div>
         )}
+        {roundOpen && <RoundLog board={board} onClose={() => setRoundFor(null)} />}
       </div>
 
       {watching === null && status.kind === 'over' && (
@@ -641,6 +669,32 @@ export function TableScreen({
         <Ghost drag={drag.drag} tile={findTile(drag.drag, rack, table)} ghostRef={drag.ghostRef} />
       )}
     </div>
+  );
+}
+
+/**
+ * The other players' turns since this seat's last, each in full beside its face (KUB-53). It
+ * lies over the table just above the turn bar, so opening it moves neither the bar nor the rack;
+ * any tap on it closes it.
+ */
+function RoundLog({ board, onClose }: { board: Board; onClose: () => void }) {
+  return (
+    <section className="round-log" aria-label="Last round" onClick={onClose}>
+      <ol>
+        {board.round.map((note, index) => {
+          const face = board.faces[board.names.indexOf(note.name)] ?? null;
+          return (
+            <li key={index}>
+              {face === null ? null : <Avatar who={face} size={28} />}
+              <span>{noteText(note)}</span>
+            </li>
+          );
+        })}
+      </ol>
+      <button type="button" onClick={onClose}>
+        Close
+      </button>
+    </section>
   );
 }
 

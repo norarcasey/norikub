@@ -799,3 +799,96 @@ body {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/*
+ * The status line, and over it, once the bots have played, the button that opens their turns
+ * in full (KUB-53). The button lies on the line rather than beside it: beside Take back and End
+ * turn a phone has ~155px for the line, and a button of its own would take most of that.
+ */
+.notes-line {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.notes-open {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.notes-open:focus-visible {
+  outline: 2px solid #ffd54a;
+  outline-offset: 2px;
+}
+
+.notes-line:has(.notes-open) .notes {
+  text-decoration: underline dotted rgb(243 239 228 / 0.55);
+  text-underline-offset: 3px;
+}
+
+/*
+ * The last round's turns, laid over the table just above the turn bar. Out of the flow, it
+ * takes no room in the column, so the turn bar and the rack stay exactly where they were
+ * while it is open (KUB-2).
+ */
+.turn-bar {
+  position: relative;
+}
+
+.round-log {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 8px);
+  max-height: 50dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgb(23 48 46 / 0.97);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.round-log ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.round-log li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.round-log .avatar {
+  flex-shrink: 0;
+}
+
+.round-log button {
+  align-self: flex-end;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1.5px solid rgb(243 239 228 / 0.55);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}

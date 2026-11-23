@@ -353,6 +353,46 @@ describe('a bot turn on screen', () => {
   });
 });
 
+describe('the last round in full (KUB-53)', () => {
+  const opener = () => screen.queryByRole('button', { name: 'What the others did last round' });
+  const log = () => screen.queryByRole('region', { name: 'Last round' });
+
+  it('opens each bot’s turn in full from the status line, once the turn comes back', () => {
+    render(<BotsFirstHarness />);
+    // While a turn plays back the line is about that turn, and the round is not over yet.
+    expect(opener()).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+
+    fireEvent.click(opener() ?? document.body);
+    const turns = within(log() ?? document.body)
+      .getAllByRole('listitem')
+      .map((item) => item.textContent);
+    expect(turns).toEqual([PLAYED, 'P2 drew a tile.']);
+    expect(opener()?.getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(within(log() ?? document.body).getByRole('button', { name: 'Close' }));
+    expect(log()).toBeNull();
+  });
+
+  it('keeps the round after a tile is moved, and closes as the tile is taken up', () => {
+    render(<BotsFirstHarness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    fireEvent.click(opener() ?? document.body);
+    dragTile(rack().getByRole('button', { name: 'black 2' }), newSetZone());
+    expect(log()).toBeNull();
+    // The move let the notes go; the line still says where the round is.
+    expect(status()).toBe('Last round ›');
+    fireEvent.click(opener() ?? document.body);
+    expect(log()?.textContent).toContain(PLAYED);
+  });
+
+  it('has no round to open before any bot has played', () => {
+    render(<Harness />);
+    expect(opener()).toBeNull();
+    expect(status()).toBe('');
+  });
+});
+
 /**
  * Two passes in already, with the pool empty: the person's pass is the third in a row, so the
  * game ends on the lowest rack. The pool's tiles are in P2's rack, which makes P2's the

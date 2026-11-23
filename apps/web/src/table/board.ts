@@ -10,7 +10,7 @@ import type { Pile } from './pile.ts';
 import type { RackRows } from './rack.ts';
 import type { Frame } from './replay.ts';
 import { PERSON, drawTile, finishTurn, moveTile, moveTiles, probe, undoTurn } from './session.ts';
-import type { Note, RackSpot, Session } from './session.ts';
+import type { Note, Played, RackSpot, Session } from './session.ts';
 
 /**
  * What the table screen draws: one seat's sight of the game and nothing more. The bot game
@@ -37,6 +37,8 @@ export type Board = {
   readonly left: readonly (number | null)[];
   readonly rows: RackRows;
   readonly notes: readonly Note[];
+  /** The other players' turns since this seat's last one, for the status line to open (KUB-53). */
+  readonly round: readonly Played[];
   readonly replay: readonly Frame[];
   /**
    * Seats with no device connected, by seat (`KUB-35`): away, never gone. Only a friends'
@@ -78,6 +80,7 @@ export function boardOf(session: Session): Board {
     left: game.players.map((player) => rackPenalty(player.rack)),
     rows: session.rows,
     notes: session.notes,
+    round: session.round,
     replay: session.replay,
     away: game.players.map(() => false),
     faces: game.players.map((_, seat) =>
