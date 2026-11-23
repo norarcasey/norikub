@@ -36,11 +36,12 @@ export const SITE_REFUSED = 'site';
 
 /**
  * What a seat sends over its socket: `deal`, the first seat's once two or more are seated,
- * and the four messages of a turn being played (`apply` in `table.ts`), from the seat whose
- * turn it is.
+ * `cancel`, any seat's, which calls the table off for everyone (`KUB-52`), and the four
+ * messages of a turn being played (`apply` in `table.ts`), from the seat whose turn it is.
  */
 export const tableClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('deal') }).readonly(),
+  z.object({ type: z.literal('cancel') }).readonly(),
   ...turnMessageSchema.options,
 ]);
 export type TableClientMessage = z.infer<typeof tableClientMessageSchema>;

@@ -48,8 +48,25 @@ describe('sitting down', () => {
 
   it("gives a table's own refusal in its words", async () => {
     const said = await sitDownAnswered(() =>
-      Promise.resolve(Response.json({ refused: { kind: 'table-full' } }, { status: 409 })),
+      Promise.resolve(
+        Response.json(
+          { refused: { kind: 'table', refusal: { kind: 'table-full' } } },
+          { status: 409 },
+        ),
+      ),
     );
     expect(said).toMatch(/This table is full/);
+  });
+
+  it('says a cancelled table has been cancelled', async () => {
+    const said = await sitDownAnswered(() =>
+      Promise.resolve(
+        Response.json(
+          { refused: { kind: 'table', refusal: { kind: 'cancelled' } } },
+          { status: 409 },
+        ),
+      ),
+    );
+    expect(said).toMatch(/This table has been cancelled/);
   });
 });

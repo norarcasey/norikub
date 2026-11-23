@@ -4,12 +4,13 @@ import type { FormEvent, ReactNode } from 'react';
 import { parse } from '@norikub/core/parse';
 import { joinResponseSchema, SITE_REFUSED } from '@norikub/core/protocol';
 import type { JoinResponse } from '@norikub/core/protocol';
-import { displayNameSchema, tableRefusalSchema } from '@norikub/core/table';
+import { displayNameSchema, refusalSchema } from '@norikub/core/table';
 import { z } from 'zod';
 
 import type { Actions } from '../table/board.ts';
+import { MenuButton, MenuDrawer } from '../Menu.tsx';
 import { TableScreen } from '../table/GameScreen.tsx';
-import { tableRefusalText } from '../table/messages.ts';
+import { hostRefusalText, tableRefusalText } from '../table/messages.ts';
 import {
   friendsBoard,
   isAway,
@@ -18,6 +19,7 @@ import {
   probeMove,
   received,
   reconnected,
+  sendCancel,
   sendDeal,
   sendTiles,
   sendTurn,
@@ -63,8 +65,16 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
   const [lostSeat, setLostSeat] = useState(false);
   const [friends, setFriends] = useState<Friends>(() => newFriends(rowsOf(keptSeat(code))));
   const [link, setLink] = useState<Link>('connecting');
+  const [menuOpen, setMenuOpen] = useState(false);
   const socket = useRef<TableLink | null>(null);
-  const token = kept?.token ?? null;
+  // A cancelled table has nothing more to say: the socket closes, and the seat is forgotten so
+  // this device stops offering the way back to it (KUB-52).
+  const cancelled = friends.host?.phase === 'cancelled';
+  const token = cancelled ? null : (kept?.token ?? null);
+
+  useEffect(() => {
+    if (cancelled) forgetSeat(code);
+  }, [cancelled, code]);
 
   useEffect(() => {
     if (token === null) return;
@@ -102,9 +112,20 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
 
   // The rack's layout is this device's, kept beside the seat so a reload finds it as it was.
   useEffect(() => {
-    if (kept === null || friends.rows === null) return;
+    if (kept === null || friends.rows === null || cancelled) return;
     keepSeat(code, { ...kept, rows: friends.rows, startRows: friends.startRows });
-  }, [code, kept, friends.rows, friends.startRows]);
+  }, [code, kept, friends.rows, friends.startRows, cancelled]);
+
+  if (friends.host?.phase === 'cancelled') {
+    const { by, you, names } = friends.host;
+    return (
+      <Panel>
+        <h2>Table {code}</h2>
+        <p role="status">{by === you ? 'You' : (names[by] ?? 'A player')} cancelled this table.</p>
+        <a href="/">Play the bots</a>
+      </Panel>
+    );
+  }
 
   if (kept === null) {
     return (
@@ -148,6 +169,7 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
         notes={friends.notes}
         status={status}
         onDeal={() => dispatch(sendDeal(friends))}
+        onCancel={() => dispatch(sendCancel(friends))}
       />
     );
   }
@@ -171,7 +193,57 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
     ) : (
       <p>Waiting for {host.names[0] ?? 'the first player'} to deal again.</p>
     );
-  return <TableScreen board={board} actions={actions} barEnd={status} afterScores={next} />;
+  const barEnd = (
+    <>
+      {status}
+      <MenuButton open={menuOpen} onOpen={() => setMenuOpen(true)} />
+    </>
+  );
+  return (
+    <>
+      <TableScreen board={board} actions={actions} barEnd={barEnd} afterScores={next} />
+      {menuOpen && (
+        <MenuDrawer onClose={() => setMenuOpen(false)}>
+          <a className="menu-item" href="/">
+            Play the bots
+          </a>
+          <CancelTable
+            className="menu-item"
+            onCancel={() => {
+              setMenuOpen(false);
+              dispatch(sendCancel(friends));
+            }}
+          />
+        </MenuDrawer>
+      )}
+    </>
+  );
+}
+
+/**
+ * Calls the table off for everyone at it, after asking once (KUB-52): one stray tap would
+ * otherwise end a game for every friend at the table, and nothing brings it back.
+ */
+function CancelTable({ className, onCancel }: { className?: string; onCancel: () => void }) {
+  const [asking, setAsking] = useState(false);
+  if (!asking) {
+    return (
+      <button type="button" className={className} onClick={() => setAsking(true)}>
+        Cancel table
+      </button>
+    );
+  }
+  return (
+    <div className="cancel-ask" role="group" aria-label="Cancel table">
+      <p>End this table for everyone at it? It cannot be undone.</p>
+      <button type="button" className={className} onClick={onCancel}>
+        Yes, cancel it
+      </button>
+      <button type="button" className={className} onClick={() => setAsking(false)}>
+        Keep the table
+      </button>
+    </div>
+  );
 }
 
 function rowsOf(seat: KeptSeat | null) {
@@ -187,8 +259,12 @@ function Panel({ children }: { children: ReactNode }) {
   );
 }
 
-/** The host's answer to a refused join: `{ refused }`, a table refusal or the host's own words. */
-const joinRefusedSchema = z.object({ refused: z.union([tableRefusalSchema, z.string()]) });
+/**
+ * The host's answer to a refused join: `{ refused }`, the core's refusal as `joinRoom` gave it,
+ * or the host's own words. Until KUB-52 this read a bare table refusal, which the host never
+ * sends, so a full table was "answered in a way this page does not understand".
+ */
+const joinRefusedSchema = z.object({ refused: z.union([refusalSchema, z.string()]) });
 
 type SatDown = { kind: 'seated'; seat: JoinResponse } | { kind: 'not seated'; text: string };
 
@@ -235,7 +311,7 @@ async function sitDown(url: URL, name: string): Promise<SatDown> {
     kind: 'not seated',
     text:
       typeof reason !== 'string'
-        ? tableRefusalText(reason)
+        ? hostRefusalText(reason)
         : 'The table would not seat you. Try again.',
   };
 }
@@ -311,6 +387,7 @@ function Seating({
   notes,
   status,
   onDeal,
+  onCancel,
 }: {
   code: string;
   names: readonly string[];
@@ -319,6 +396,7 @@ function Seating({
   notes: Friends['notes'];
   status: ReactNode;
   onDeal: () => void;
+  onCancel: () => void;
 }) {
   const link = `${window.location.origin}/t/${code}`;
   const [copied, setCopied] = useState(false);
@@ -365,6 +443,7 @@ function Seating({
             : `Waiting for ${names[0] ?? 'the first player'} to deal.`}
       </p>
       {status}
+      <CancelTable onCancel={onCancel} />
     </Panel>
   );
 }

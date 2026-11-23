@@ -5,7 +5,16 @@ import { layout, ts } from './fixtures.test-helpers.ts';
 import { finish, seatView } from './game.ts';
 import { parse } from './parse.ts';
 import { seededRandom } from './random.ts';
-import { apply, deal, newTable, sitDown, tableSchema, tableViewFor, turnOf } from './table.ts';
+import {
+  apply,
+  cancel,
+  deal,
+  newTable,
+  sitDown,
+  tableSchema,
+  tableViewFor,
+  turnOf,
+} from './table.ts';
 import type { Applied, Outcome, Table, TurnMessage } from './table.ts';
 import type { Move } from './turn.ts';
 
@@ -112,6 +121,45 @@ describe('seating and the deal', () => {
       ok: false,
       refusal: { kind: 'table', refusal: { kind: 'game-over' } },
     });
+  });
+});
+
+describe('cancelling', () => {
+  const refusal = (kind: string): unknown => ({
+    ok: false,
+    refusal: { kind: 'table', refusal: { kind } },
+  });
+  const cancelled = (table: Table, seat: number): Table => {
+    const result = cancel(table, seat);
+    if (!result.ok) throw new Error(JSON.stringify(result.refusal));
+    return result.value;
+  };
+
+  it('is any seated player’s, before the deal or mid-game, and says who', () => {
+    expect(cancelled(seated('Nora', 'Ana'), 1)).toEqual({
+      phase: 'cancelled',
+      names: ['Nora', 'Ana'],
+      by: 1,
+    });
+    const table = dealt(5, 'Nora', 'Ana', 'Bo');
+    expect(cancelled(table, 2)).toMatchObject({ phase: 'cancelled', by: 2 });
+    expect(cancel(table, 3)).toEqual(refusal('no-such-seat'));
+    expect(parse(tableSchema, cancelled(table, 0)).ok).toBe(true);
+  });
+
+  it('is for good: no seat, deal, move or second cancel is taken after it', () => {
+    const table = cancelled(dealt(5, 'Nora', 'Ana'), 0);
+    expect(sitDown(table, 'Bo')).toEqual(refusal('cancelled'));
+    expect(deal(table, 0, 6)).toEqual(refusal('cancelled'));
+    expect(apply(table, 0, { type: 'end-turn' })).toEqual(refusal('cancelled'));
+    expect(cancel(table, 1)).toEqual(refusal('cancelled'));
+  });
+
+  it('shows every seat who called it off, and no tile', () => {
+    const table = cancelled(dealt(5, 'Nora', 'Ana'), 1);
+    const view = tableViewFor(table, 0);
+    expect(view).toEqual({ phase: 'cancelled', you: 0, names: ['Nora', 'Ana'], by: 1 });
+    expect(idsIn(view).size).toBe(0);
   });
 });
 

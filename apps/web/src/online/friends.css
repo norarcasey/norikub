@@ -157,3 +157,13 @@
   color: var(--text);
   font: inherit;
 }
+
+/* Asking before a table is called off for everyone (KUB-52). */
+.cancel-ask {
+  display: grid;
+  gap: 8px;
+}
+
+.cancel-ask p {
+  margin: 0;
+}

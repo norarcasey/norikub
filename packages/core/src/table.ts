@@ -50,6 +50,18 @@ export const tableSchema = z.discriminatedUnion('phase', [
       working: workingSchema.nullable(),
     })
     .readonly(),
+  /**
+   * Called off by a seated player (`KUB-52`), before the deal or mid-game, and for good: the
+   * code names this table and no other, so it refuses every later seat, deal and move rather
+   * than becoming a fresh table that a stale link would seat someone at.
+   */
+  z
+    .object({
+      phase: z.literal('cancelled'),
+      names: z.array(displayNameSchema).max(MAX_SEATS).readonly(),
+      by: z.number().int().min(0),
+    })
+    .readonly(),
 ]);
 export type Table = z.infer<typeof tableSchema>;
 
@@ -62,6 +74,7 @@ export const tableRefusalSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('no-such-seat') }).readonly(),
   z.object({ kind: z.literal('not-your-turn') }).readonly(),
   z.object({ kind: z.literal('game-over') }).readonly(),
+  z.object({ kind: z.literal('cancelled') }).readonly(),
 ]);
 export type TableRefusal = z.infer<typeof tableRefusalSchema>;
 
@@ -90,6 +103,7 @@ export function newTable(): Table {
 
 /** The next seat, for a name already parsed with `displayNameSchema`. */
 export function sitDown(table: Table, name: string): Outcome<{ table: Table; seat: number }> {
+  if (table.phase === 'cancelled') return refused({ kind: 'cancelled' });
   if (table.phase !== 'seating') return refused({ kind: 'already-dealt' });
   if (table.names.length >= MAX_SEATS) return refused({ kind: 'table-full' });
   const names = [...table.names, name];
@@ -106,6 +120,7 @@ export function sitDown(table: Table, name: string): Outcome<{ table: Table; sea
  * which every seat is shown, says nothing about where any tile lies.
  */
 export function deal(table: Table, seat: number, seed: number): Outcome<Table> {
+  if (table.phase === 'cancelled') return refused({ kind: 'cancelled' });
   if (table.phase === 'playing' && table.game.status.kind === 'playing') {
     return refused({ kind: 'already-dealt' });
   }
@@ -118,6 +133,17 @@ export function deal(table: Table, seat: number, seed: number): Outcome<Table> {
     ok: true,
     value: { phase: 'playing', names: table.names, game: { ...game, current }, working: null },
   };
+}
+
+/**
+ * Any seated player calls the table off, for everyone at it (Nora, `KUB-52`): before the deal,
+ * mid-game or between games. Not the first seat alone, though it deals: friends who have
+ * stopped playing should not need the one who started the table to be there to end it.
+ */
+export function cancel(table: Table, seat: number): Outcome<Table> {
+  if (table.phase === 'cancelled') return refused({ kind: 'cancelled' });
+  if (table.names[seat] === undefined) return refused({ kind: 'no-such-seat' });
+  return { ok: true, value: { phase: 'cancelled', names: table.names, by: seat } };
 }
 
 /** The four messages that are a turn being played; only the seat whose turn it is sends them. */
@@ -145,6 +171,7 @@ export type Applied = { readonly table: Table; readonly drew: Drew | null };
  * `move`, `takeBack`, `endTurn` and `drawInstead`, and its refusals are passed on unchanged.
  */
 export function apply(table: Table, seat: number, message: TurnMessage): Outcome<Applied> {
+  if (table.phase === 'cancelled') return refused({ kind: 'cancelled' });
   if (table.phase !== 'playing') return refused({ kind: 'not-dealt' });
   const { game } = table;
   if (game.players[seat] === undefined) return refused({ kind: 'no-such-seat' });
@@ -204,12 +231,23 @@ export const tableViewSchema = z.discriminatedUnion('phase', [
       view: turnViewSchema,
     })
     .readonly(),
+  z
+    .object({
+      phase: z.literal('cancelled'),
+      you: z.number().int().min(0),
+      names: z.array(z.string()).readonly(),
+      by: z.number().int().min(0),
+    })
+    .readonly(),
 ]);
 export type TableView = z.infer<typeof tableViewSchema>;
 
 /** What `seat` is sent of the table. Before the deal nothing is secret; after, `turnView`. */
 export function tableViewFor(table: Table, seat: number): TableView {
   if (table.phase === 'seating') return { phase: 'seating', you: seat, names: table.names };
+  if (table.phase === 'cancelled') {
+    return { phase: 'cancelled', you: seat, names: table.names, by: table.by };
+  }
   const open = table.working !== null && table.game.status.kind === 'playing';
   const turn = open ? turnOf(table) : null;
   return {

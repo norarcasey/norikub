@@ -133,6 +133,20 @@ reach a table except its code, so non-goal 2 (no strangers, no matchmaking) hold
 construction. The code is random and long enough not to be guessed; a friend who has it sits
 down by name.
 
+## Cancelling a table
+
+Built in `KUB-52`, 22 Nov 2026. Any seated player can call the table off for everyone, from
+the seating panel or the game bar's menu, after one "are you sure": before the deal, mid-game
+or between games. Not the first seat alone, though it deals: friends who have stopped should
+not need whoever started the table to be there to end it.
+
+It is a third phase of the core's table, `cancelled`, which keeps the names and who called it
+off. It is for good: every later sit-down, deal, move and second cancel is refused with the
+table refusal `cancelled`, so the code never becomes a fresh table that a stale link seats
+someone at. The object keeps the row rather than deleting it, so a device that was offline
+learns on its next connect that the table was cancelled. On a cancelled view the page closes
+its socket and forgets its seat, so "Back to your game" stops offering the table.
+
 ## Who you are, and why sign-in is not needed to play
 
 Sitting down answers a **seat token**, kept in the device's own storage under the table's

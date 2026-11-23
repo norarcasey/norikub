@@ -4,6 +4,7 @@ import { layout, ts } from '../../../../packages/core/src/fixtures.test-helpers.
 import type { TableClientMessage, TableMessage } from '../../../../packages/core/src/protocol.ts';
 import {
   apply,
+  cancel,
   deal,
   newTable,
   sitDown,
@@ -16,6 +17,7 @@ import {
   newFriends,
   placeTile,
   received,
+  sendCancel,
   sendDeal,
   sendTiles,
   sendTurn,
@@ -44,6 +46,13 @@ class Host {
       if (!dealt.ok)
         return void this.inbox[seat]?.push({ type: 'refused', refusal: dealt.refusal });
       this.table = dealt.value;
+      return this.broadcast();
+    }
+    if (message.type === 'cancel') {
+      const cancelled = cancel(this.table, seat);
+      if (!cancelled.ok)
+        return void this.inbox[seat]?.push({ type: 'refused', refusal: cancelled.refusal });
+      this.table = cancelled.value;
       return this.broadcast();
     }
     const applied = apply(this.table, seat, message);
@@ -254,6 +263,33 @@ describe('seating and the deal', () => {
       expect(page.rows?.flat().filter((id) => id !== null)).toHaveLength(14);
       expect(friendsBoard(page)?.pile).toHaveLength(106 - 28);
     }
+  });
+});
+
+describe('cancelling the table', () => {
+  it('ends it for every seat, mid-turn, and drops what the mover was ahead with', () => {
+    const host = playing();
+    let mover = host.deliver(0, newFriends());
+    let watcher = host.deliver(1, newFriends());
+    mover = placeTile(mover, { kind: 'to-new-set', tileId: 'red-1-a' }).state;
+    expect(mover.ahead).not.toBeNull();
+
+    watcher = sent(host, 1, sendCancel(watcher));
+    mover = host.deliver(0, mover);
+    watcher = host.deliver(1, watcher);
+    for (const page of [mover, watcher]) {
+      expect(page.host).toMatchObject({ phase: 'cancelled', by: 1 });
+      expect(shownView(page)).toBeNull();
+      expect(friendsBoard(page)).toBeNull();
+    }
+    expect(watcher.unanswered).toBe(0);
+
+    // Nothing is played at a cancelled table, and it is not cancelled twice.
+    sent(host, 0, sendTurn(mover, { type: 'end-turn' }));
+    sent(host, 0, sendCancel(mover));
+    expect(host.deliver(0, mover).notes).toEqual([
+      { kind: 'host', refusal: { kind: 'table', refusal: { kind: 'cancelled' } } },
+    ]);
   });
 });
 

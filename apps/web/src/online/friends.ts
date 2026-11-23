@@ -111,7 +111,7 @@ function refusalNotes(refusal: Refusal): Note[] {
 function viewed(state: Friends, table: TableView): Friends {
   const was = state.host?.phase === 'playing' ? state.host.view : null;
   const answered = { ...answer(state), host: table };
-  if (table.phase === 'seating') return { ...answered, drew: null };
+  if (table.phase !== 'playing') return { ...answered, ahead: null, drew: null, replay: [] };
   const view = table.view;
   const shown = answered.ahead ?? view;
 
@@ -315,6 +315,17 @@ export function sendDeal(state: Friends): Sent {
   return {
     state: { ...state, unanswered: state.unanswered + 1, notes: [] },
     send: [{ type: 'deal' }],
+  };
+}
+
+/**
+ * Any seat calls the table off for everyone (`KUB-52`). Nothing is shown ahead of the host:
+ * the table is over only once the host's cancelled view says so, to every seat at once.
+ */
+export function sendCancel(state: Friends): Sent {
+  return {
+    state: { ...state, unanswered: state.unanswered + 1, notes: [] },
+    send: [{ type: 'cancel' }],
   };
 }
 

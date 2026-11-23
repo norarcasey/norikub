@@ -12,7 +12,7 @@ import {
   type JoinResponse,
   type TableMessage,
 } from '../../../packages/core/src/protocol.ts';
-import { apply, deal, tableViewFor } from '../../../packages/core/src/table.ts';
+import { apply, cancel, deal, tableViewFor } from '../../../packages/core/src/table.ts';
 import { isStale, presence, SWEEP_EVERY_MS, type OpenSeat } from './presence.ts';
 import { joinRoom, readRoom, seatOf, type Room } from './room.ts';
 
@@ -132,6 +132,13 @@ export class Table extends DurableObject<object> {
       const dealt = deal(room.table, seat, freshSeed());
       if (!dealt.ok) return send(ws, { type: 'refused', refusal: dealt.refusal });
       const saved = { ...room, table: dealt.value };
+      this.save(saved);
+      return this.broadcast(saved);
+    }
+    if (m.type === 'cancel') {
+      const cancelled = cancel(room.table, seat);
+      if (!cancelled.ok) return send(ws, { type: 'refused', refusal: cancelled.refusal });
+      const saved = { ...room, table: cancelled.value };
       this.save(saved);
       return this.broadcast(saved);
     }

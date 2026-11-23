@@ -101,6 +101,8 @@ export function tableRefusalText(refusal: TableRefusal): string {
       return 'It is not your turn.';
     case 'game-over':
       return 'The game is over.';
+    case 'cancelled':
+      return 'This table has been cancelled.';
   }
 }
 

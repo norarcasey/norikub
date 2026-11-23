@@ -402,3 +402,40 @@ describe('a table played over two sockets', () => {
     kit.close();
   }, 20_000);
 });
+
+describe('a cancelled table', () => {
+  it('is cancelled by any seat for everyone, stays so, and seats nobody after', async () => {
+    const code = freshCode();
+    const seats = [await seatAt(code, 'Nora'), await seatAt(code, 'Kit')];
+    const [nora, kit] = seats.map((s) => new Seat(code, s.token));
+    if (nora === undefined || kit === undefined) throw new Error('two seats');
+    await nora.send({ type: 'deal' });
+    await kit.until((s) => s.views().at(-1)?.phase === 'playing');
+
+    // Kit, who does not deal, calls it off mid-game; both seats are told who did.
+    await kit.send({ type: 'cancel' });
+    const told = { phase: 'cancelled', names: ['Nora', 'Kit'], by: 1 };
+    await nora.until((s) => s.views().at(-1)?.phase === 'cancelled');
+    await kit.until((s) => s.views().at(-1)?.phase === 'cancelled');
+    expect(nora.lastView()).toEqual({ ...told, you: 0 });
+    expect(kit.lastView()).toEqual({ ...told, you: 1 });
+
+    // Stored: nothing more is taken, and a device coming back to its seat is told the same.
+    await nora.send({ type: 'deal' });
+    await nora.until((s) => s.messages().at(-1)?.type === 'refused');
+    expect(nora.messages().at(-1)).toEqual({
+      type: 'refused',
+      refusal: { kind: 'table', refusal: { kind: 'cancelled' } },
+    });
+    const back = new Seat(code, seats[0]?.token ?? '');
+    await back.until((s) => s.views().length > 0);
+    expect(back.lastView()).toEqual({ ...told, you: 0 });
+    const late = await sitDown(code, 'Bo');
+    expect(late.status).toBe(409);
+    // The page's join reads this shape (FriendsTable.tsx); until KUB-52 it read another.
+    expect(await late.json()).toEqual({
+      refused: { kind: 'table', refusal: { kind: 'cancelled' } },
+    });
+    for (const seat of [nora, kit, back]) seat.close();
+  });
+});

@@ -166,4 +166,19 @@ test('three friends play a game at one table', async ({ browser }) => {
     await expect(f.page.getByRole('region', { name: 'Scores' })).toBeHidden();
     await expect(f.page.locator('.rack .tile')).toHaveCount(14);
   }
+
+  // One friend, not the dealer, calls the table off from the menu (KUB-52); everyone is told
+  // who, and a reload finds it cancelled rather than a seat to sit down in.
+  const caller = bo;
+  await caller.page.getByRole('button', { name: 'Menu' }).click();
+  await caller.page.getByRole('button', { name: 'Cancel table' }).click();
+  await caller.page.getByRole('button', { name: 'Yes, cancel it' }).click();
+  for (const f of all) {
+    const who = f === caller ? 'You' : caller.name;
+    await expect(f.page.getByRole('status')).toHaveText(`${who} cancelled this table.`);
+  }
+  await ana.page.reload();
+  await ana.page.getByLabel('Your name').fill('Ana');
+  await ana.page.getByRole('button', { name: 'Sit down' }).click();
+  await expect(ana.page.getByRole('status')).toHaveText('This table has been cancelled.');
 });
