@@ -1,3 +1,4 @@
+import type { AwayOffer } from '@norikub/core/away';
 import type { TableClientMessage, TableMessage } from '@norikub/core/protocol';
 import { summarizeTurn } from '@norikub/core/summary';
 import type { Refusal, TableView } from '@norikub/core/table';
@@ -48,6 +49,11 @@ export type Friends = {
    * A seat with none is away, never gone: it waits for its device.
    */
   readonly here: readonly boolean[] | null;
+  /**
+   * The host's word that the seat whose turn it is has been away long enough for the others
+   * to draw for it, and who has agreed (`KUB-37`); null when no turn is held up.
+   */
+  readonly awayTurn: AwayOffer | null;
 };
 
 /** `rows` is the rack as this device last laid it out, kept under the table's code. */
@@ -63,6 +69,7 @@ export function newFriends(rows: { rows: RackRows; startRows: RackRows } | null 
     pile: null,
     drew: null,
     here: null,
+    awayTurn: null,
   };
 }
 
@@ -89,6 +96,8 @@ export function received(state: Friends, message: TableMessage): Friends {
       return { ...state, drew: { seat: message.seat, drewAt: message.drewAt } };
     case 'presence':
       return { ...state, here: message.here };
+    case 'away-turn':
+      return { ...state, awayTurn: message.offer };
     // Bots at a friends' table are KUB-36; no host sends their moves yet.
     case 'bot-turn':
       return state;
@@ -326,6 +335,33 @@ export function sendCancel(state: Friends): Sent {
   return {
     state: { ...state, unanswered: state.unanswered + 1, notes: [] },
     send: [{ type: 'cancel' }],
+  };
+}
+
+/**
+ * This seat's answer to "Draw a tile for <name>?" (`KUB-37`): yes, or no to take back a yes.
+ * The host alone decides whether it carries; nothing is shown ahead of it.
+ */
+export function sendAwayVote(state: Friends, yes: boolean): Sent {
+  return {
+    state: { ...state, unanswered: state.unanswered + 1, notes: [] },
+    send: [{ type: 'draw-for-away', yes }],
+  };
+}
+
+/** The question as this seat is asked it, or null when it is not one of those asked. */
+export function awayQuestion(state: Friends): {
+  readonly seat: number;
+  readonly agreed: boolean;
+  readonly waitingFor: readonly number[];
+} | null {
+  const offer = state.awayTurn;
+  const you = state.host?.you;
+  if (offer === null || you === undefined || !offer.voters.includes(you)) return null;
+  return {
+    seat: offer.seat,
+    agreed: offer.yes.includes(you),
+    waitingFor: offer.voters.filter((seat) => seat !== you && !offer.yes.includes(seat)),
   };
 }
 

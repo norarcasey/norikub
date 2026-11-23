@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { awayOffer, settleAway, voteAway } from '../../../../packages/core/src/away.ts';
+import type { Stall } from '../../../../packages/core/src/away.ts';
 import { layout, ts } from '../../../../packages/core/src/fixtures.test-helpers.ts';
 import type { TableClientMessage, TableMessage } from '../../../../packages/core/src/protocol.ts';
 import {
@@ -13,10 +15,12 @@ import {
 import type { Table } from '../../../../packages/core/src/table.ts';
 import { noteText } from '../table/messages.ts';
 import {
+  awayQuestion,
   friendsBoard,
   newFriends,
   placeTile,
   received,
+  sendAwayVote,
   sendCancel,
   sendDeal,
   sendTiles,
@@ -33,14 +37,47 @@ import type { Friends, Sent } from './friends.ts';
  */
 class Host {
   readonly inbox: TableMessage[][];
+  /** Who is here and the time, as the real host takes them from its sockets and its clock. */
+  here: boolean[];
+  now = 0;
+  stall: Stall | null = null;
   constructor(
     public table: Table,
     seats: number,
   ) {
     this.inbox = Array.from({ length: seats }, () => []);
+    this.here = Array.from({ length: seats }, () => true);
+  }
+
+  /** The host's `settle`: the core settles the stall, then every seat hears presence and the offer. */
+  settle(): void {
+    const settled = settleAway(this.table, this.stall, this.here, this.now);
+    this.stall = settled.stall;
+    if (settled.drew !== null) this.tellDraw(settled.table, settled.drew);
+    const offer = voteAwayOffer(this);
+    for (const box of this.inbox) {
+      box.push({ type: 'presence', here: [...this.here] });
+      box.push({ type: 'away-turn', offer });
+    }
+  }
+
+  tellDraw(table: Table, drew: { seat: number; drewAt: number | null }): void {
+    this.table = table;
+    for (const box of this.inbox) box.push({ type: 'drew', ...drew });
+    this.broadcast();
   }
 
   hear(seat: number, message: TableClientMessage): void {
+    if (message.type === 'draw-for-away') {
+      const voted = voteAway(this.table, this.stall, this.here, this.now, seat, message.yes);
+      if (!voted.ok)
+        return void this.inbox[seat]?.push({ type: 'refused', refusal: voted.refusal });
+      this.stall = voted.value.stall;
+      if (voted.value.drew === null) {
+        this.inbox[seat]?.push({ type: 'view', table: tableViewFor(this.table, seat) });
+      } else this.tellDraw(voted.value.table, voted.value.drew);
+      return this.settle();
+    }
     if (message.type === 'deal') {
       const dealt = deal(this.table, seat, 7);
       if (!dealt.ok)
@@ -78,6 +115,10 @@ class Host {
     box.length = 0;
     return out;
   }
+}
+
+function voteAwayOffer(host: Host) {
+  return awayOffer(host.stall, host.here, host.now);
 }
 
 function playing(): Host {
@@ -301,6 +342,57 @@ describe('who is here', () => {
     expect(friendsBoard(page)?.away).toEqual([false, true, false]);
     page = received(page, { type: 'presence', here: [true, true, true] });
     expect(friendsBoard(page)?.away).toEqual([false, false, false]);
+  });
+});
+
+describe('a player who is away on their turn', () => {
+  it('asks the others, and draws for them once everyone here has said yes', () => {
+    const host = playing();
+    let ana = host.deliver(0, newFriends());
+    let bo = host.deliver(1, newFriends());
+    let cy = host.deliver(2, newFriends());
+    // Ana starts reworking the table, then her phone goes to sleep.
+    ana = sent(host, 0, placeTile(ana, { kind: 'to-new-set', tileId: 'red-1-a' }));
+    host.here = [false, true, true];
+    host.settle();
+    bo = host.deliver(1, bo);
+    expect(bo.awayTurn).toBeNull();
+    expect(awayQuestion(bo)).toBeNull();
+
+    host.now = 60_000;
+    host.settle();
+    bo = host.deliver(1, bo);
+    cy = host.deliver(2, cy);
+    expect(awayQuestion(bo)).toEqual({ seat: 0, agreed: false, waitingFor: [2] });
+
+    bo = sent(host, 1, sendAwayVote(bo, true));
+    bo = host.deliver(1, bo);
+    cy = host.deliver(2, cy);
+    expect(bo.unanswered).toBe(0);
+    expect(awayQuestion(bo)).toEqual({ seat: 0, agreed: true, waitingFor: [2] });
+    expect(awayQuestion(cy)).toEqual({ seat: 0, agreed: false, waitingFor: [] });
+    expect(host.table.phase === 'playing' && host.table.game.current).toBe(0);
+
+    cy = sent(host, 2, sendAwayVote(cy, true));
+    bo = host.deliver(1, bo);
+    cy = host.deliver(2, cy);
+    ana = host.deliver(0, ana);
+    // Ana's half-made turn is taken back, not judged, and she has one tile more.
+    expect(shownView(bo)?.current).toBe(1);
+    expect(shownView(bo)?.table).toEqual([ts('blue-1-a', 'blue-2-a', 'blue-3-a')]);
+    expect(shownView(ana)?.rack).toHaveLength(5);
+    expect(bo.awayTurn).toBeNull();
+    expect(cy.unanswered).toBe(0);
+    expect(bo.replay.at(-1)?.step).toEqual({ kind: 'drew', face: null });
+  });
+
+  it('refuses a vote from a seat that is not asked', () => {
+    const host = playing();
+    let bo = host.deliver(1, newFriends());
+    bo = sent(host, 1, sendAwayVote(bo, true));
+    expect(host.deliver(1, bo).notes.map(noteText)).toEqual([
+      'There is nobody away to draw for now.',
+    ]);
   });
 });
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { awayOfferSchema } from './away.ts';
 import { displayNameSchema, refusalSchema, tableViewSchema, turnMessageSchema } from './table.ts';
 import { moveSchema } from './turn.ts';
 
@@ -38,10 +39,13 @@ export const SITE_REFUSED = 'site';
  * What a seat sends over its socket: `deal`, the first seat's once two or more are seated,
  * `cancel`, any seat's, which calls the table off for everyone (`KUB-52`), and the four
  * messages of a turn being played (`apply` in `table.ts`), from the seat whose turn it is.
+ * `draw-for-away` is a seat's answer to "Draw a tile for <name>?" (`KUB-37`, `away.ts`): yes,
+ * or no to take back a yes.
  */
 export const tableClientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('deal') }).readonly(),
   z.object({ type: z.literal('cancel') }).readonly(),
+  z.object({ type: z.literal('draw-for-away'), yes: z.boolean() }).readonly(),
   ...turnMessageSchema.options,
 ]);
 export type TableClientMessage = z.infer<typeof tableClientMessageSchema>;
@@ -75,6 +79,12 @@ export const tableMessageSchema = z.discriminatedUnion('type', [
    * view, as in Hanora, so a page older than it ignores it instead of failing every view.
    */
   z.object({ type: z.literal('presence'), here: z.array(z.boolean()).readonly() }).readonly(),
+  /**
+   * Whether the others may draw for a seat that is away on its turn, and who has agreed
+   * (`KUB-37`); null when nobody is. Sent with every presence, after every change, and on each
+   * sweep while it is open. Its own message for the reason presence is.
+   */
+  z.object({ type: z.literal('away-turn'), offer: awayOfferSchema.nullable() }).readonly(),
 ]);
 export type TableMessage = z.infer<typeof tableMessageSchema>;
 

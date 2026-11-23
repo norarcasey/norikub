@@ -12,6 +12,7 @@ import { MenuButton, MenuDrawer } from '../Menu.tsx';
 import { TableScreen } from '../table/GameScreen.tsx';
 import { hostRefusalText, tableRefusalText } from '../table/messages.ts';
 import {
+  awayQuestion,
   friendsBoard,
   isAway,
   newFriends,
@@ -19,6 +20,7 @@ import {
   probeMove,
   received,
   reconnected,
+  sendAwayVote,
   sendCancel,
   sendDeal,
   sendTiles,
@@ -66,6 +68,9 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
   const [friends, setFriends] = useState<Friends>(() => newFriends(rowsOf(keptSeat(code))));
   const [link, setLink] = useState<Link>('connecting');
   const [menuOpen, setMenuOpen] = useState(false);
+  // The away seat whose question this device has put aside with "Not yet", until it is asked
+  // about someone else; the bar keeps a way back to it.
+  const [putAside, setPutAside] = useState<number | null>(null);
   const socket = useRef<TableLink | null>(null);
   // A cancelled table has nothing more to say: the socket closes, and the seat is forgotten so
   // this device stops offering the way back to it (KUB-52).
@@ -193,15 +198,35 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
     ) : (
       <p>Waiting for {host.names[0] ?? 'the first player'} to deal again.</p>
     );
+  const question = awayQuestion(friends);
+  const asked = question !== null && putAside !== question.seat;
+  const awayName = question === null ? '' : (host.names[question.seat] ?? 'the player away');
   const barEnd = (
     <>
       {status}
+      {question !== null && !asked ? (
+        <button type="button" className="away-reopen" onClick={() => setPutAside(null)}>
+          Draw for {awayName}?
+        </button>
+      ) : null}
       <MenuButton open={menuOpen} onOpen={() => setMenuOpen(true)} />
     </>
   );
   return (
     <>
       <TableScreen board={board} actions={actions} barEnd={barEnd} afterScores={next} />
+      {question !== null && asked ? (
+        <AwayAsk
+          name={awayName}
+          agreed={question.agreed}
+          waitingFor={question.waitingFor.map((seat) => host.names[seat] ?? 'another player')}
+          onYes={() => dispatch(sendAwayVote(friends, true))}
+          onNotYet={() => {
+            if (question.agreed) dispatch(sendAwayVote(friends, false));
+            setPutAside(question.seat);
+          }}
+        />
+      ) : null}
       {menuOpen && (
         <MenuDrawer onClose={() => setMenuOpen(false)}>
           <a className="menu-item" href="/">
@@ -218,6 +243,61 @@ export function FriendsTable({ code, server }: { code: string; server: URL }) {
       )}
     </>
   );
+}
+
+/**
+ * "Draw a tile for <name>?" (Nora, KUB-37): asked of everyone here once the player whose turn
+ * it is has been away a minute. The host draws when all of them have said yes; until then a
+ * yes can be taken back, and "Not yet" puts the question aside on this device alone.
+ */
+function AwayAsk({
+  name,
+  agreed,
+  waitingFor,
+  onYes,
+  onNotYet,
+}: {
+  name: string;
+  agreed: boolean;
+  waitingFor: readonly string[];
+  onYes: () => void;
+  onNotYet: () => void;
+}) {
+  return (
+    <div className="away-veil">
+      <section
+        className="lobby away-ask"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="away-ask-title"
+      >
+        <h2 id="away-ask-title">Draw a tile for {name}?</h2>
+        <p>
+          {name} has been away for over a minute on their turn. Drawing for them passes the turn on;
+          anything they had moved goes back.
+        </p>
+        {agreed ? (
+          <p role="status">
+            {waitingFor.length === 0
+              ? 'Drawing…'
+              : `Waiting for ${listNames(waitingFor)} to agree.`}
+          </p>
+        ) : (
+          <button type="button" className="primary" onClick={onYes}>
+            Draw for {name}
+          </button>
+        )}
+        <button type="button" onClick={onNotYet}>
+          Not yet
+        </button>
+      </section>
+    </div>
+  );
+}
+
+function listNames(names: readonly string[]): string {
+  if (names.length <= 1) return names.join('');
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}`;
 }
 
 /**

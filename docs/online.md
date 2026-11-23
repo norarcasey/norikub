@@ -189,14 +189,39 @@ Measured with `e2e/presence.spec.ts` (`pnpm e2e`), two Chromium contexts through
 | Back online, shown here again to the others             | 25 ms, 26 ms   |
 
 The offline time is the sweep's: up to 50 s since the socket was last heard, found at the
-next 15 s sweep. It is the one slow test in `pnpm e2e`, about a minute, and the only test of
-the sweep against the real runtime.
+next 15 s sweep. It and `e2e/away.spec.ts` (`KUB-37`) are the slow tests in `pnpm e2e`,
+about a minute and a quarter each, and the only tests of the sweep against the real runtime.
 
 What Hanora never needed, and Norikub does: in a turn-based game, **an away player stalls
-everyone**. Nothing is decided here. The rules give a turn a time limit (a minute, at a real
-table), and friends playing over an evening may want none. The likely shape is no limit, and
-a seat away for a while can be skipped (its turn becomes a draw) or handed to a bot by the
-others; that is Nora's choice, filed as `KUB-37`.
+everyone**.
+
+## A player who is away on their turn
+
+Nora's choice (`KUB-37`, 22 Nov 2026): no turn limit and no bot standing in. Once the player
+whose turn it is has been away a minute, everyone else at the table is asked **"Draw a tile
+for <name>?"**, and when every one of them has said yes the host draws for that player, just
+as if they had pressed Draw: whatever they had moved on the table goes back, unjudged, and
+the turn passes on. A yes can be taken back; "Not yet" puts the question aside on that device,
+with a button in the game bar to bring it back. A player who returns before then plays their
+own turn and the question goes away.
+
+- **The rules are the core's** (`packages/core/src/away.ts`, invariant 1): who is asked (the
+  seats that are here, other than the away one), when (`AWAY_TURN_MS`, a minute from the
+  later of the turn reaching the seat and the seat going away, so a player who stepped out
+  during the others' turns still gets their minute), and when it carries. If the last one who
+  had not agreed goes away too, everyone still here has agreed, and it carries.
+- **The host keeps the stall** (whose turn, since when, who said yes) in its room row beside
+  the table, since it is about presence and time, which a `Table` does not hold. Every change
+  of presence, turn or vote goes through the host's `settle`, which tells every seat
+  `{type:'away-turn', offer}` with the presence; the 15 s sweep is what notices the minute has
+  passed, so the question opens 60–75 s after a closed page. A phone that lost signal is only
+  known to be away 50–65 s later, so for it the question comes about two minutes after it went.
+- A vote is `{type:'draw-for-away', yes}`, answered to its sender with one view or one
+  refusal like every other message (`no-away-turn` when nobody is to be drawn for).
+
+`e2e/away.spec.ts` (`pnpm e2e`) plays it with three browsers: the mover closes their page, the
+question opened for the other two after 60–75 s, one yes waited for the other, and the player
+who left came back to fifteen tiles and the turn gone on.
 
 ## What it costs
 
@@ -244,5 +269,6 @@ Filed from `KUB-12`, in order:
    tile from the table in the view that follows, since a bot's moves name tiles by id.
 4. `KUB-35` Who is here, and coming back to your seat. Built: see "Who is here", above.
 5. `KUB-36` Bots in the empty seats of a friends' table.
-6. `KUB-37` A player who is away does not stall the table (Nora's choice).
+6. `KUB-37` A player who is away does not stall the table (Nora's choice). Built: see "A
+   player who is away on their turn", above.
 7. `KUB-38` Finished online games kept for signed-in seats, after `KUB-29`, for `KUB-13`.

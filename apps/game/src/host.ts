@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { z } from 'zod';
 
+import { awayOffer, settleAway, voteAway } from '../../../packages/core/src/away.ts';
 import { parse } from '../../../packages/core/src/parse.ts';
 import {
   CLOSE_GONE_QUIET,
@@ -12,7 +13,7 @@ import {
   type JoinResponse,
   type TableMessage,
 } from '../../../packages/core/src/protocol.ts';
-import { apply, cancel, deal, tableViewFor } from '../../../packages/core/src/table.ts';
+import { apply, cancel, deal, tableViewFor, type Drew } from '../../../packages/core/src/table.ts';
 import { isStale, presence, SWEEP_EVERY_MS, type OpenSeat } from './presence.ts';
 import { joinRoom, readRoom, seatOf, type Room } from './room.ts';
 
@@ -42,6 +43,11 @@ const attachmentSchema = z.object({
  * the new presence, and while any socket is open an alarm sweeps out those that have gone
  * quiet (`presence.ts`), since a phone that loses signal rarely says goodbye. A table nobody
  * is connected to sets no alarm, so it costs nothing.
+ *
+ * A seat away on its turn (`KUB-37`): every change of presence, time or turn goes through
+ * `settle`, which hands the core who is here and the time (`settleAway`); the core decides
+ * when the others are asked to draw for it and when they have all agreed. The sweep is what
+ * notices the minute has passed, so the question opens within 15 s of it.
  */
 export class Table extends DurableObject<object> {
   // The object reads nothing of the Worker's environment yet: keeping finished games
@@ -84,7 +90,7 @@ export class Table extends DurableObject<object> {
     this.save(joined.value.room);
     this.broadcast(joined.value.room);
     // A new seat is away until its device connects, and the others should see that it is.
-    this.sendPresence(joined.value.room, null);
+    this.settle(joined.value.room, null);
     const response: JoinResponse = { seat: joined.value.seat, token };
     return Response.json(response);
   }
@@ -107,7 +113,7 @@ export class Table extends DurableObject<object> {
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ seat, since: Date.now() });
     sendView(server, room, seat);
-    this.sendPresence(room, null);
+    this.settle(room, null);
     if ((await this.ctx.storage.getAlarm()) === null) {
       await this.ctx.storage.setAlarm(Date.now() + SWEEP_EVERY_MS);
     }
@@ -138,27 +144,45 @@ export class Table extends DurableObject<object> {
     if (m.type === 'cancel') {
       const cancelled = cancel(room.table, seat);
       if (!cancelled.ok) return send(ws, { type: 'refused', refusal: cancelled.refusal });
-      const saved = { ...room, table: cancelled.value };
+      const saved = { ...room, table: cancelled.value, stall: null };
       this.save(saved);
-      return this.broadcast(saved);
+      this.broadcast(saved);
+      return this.settle(saved, null);
+    }
+    if (m.type === 'draw-for-away') {
+      const voted = voteAway(
+        room.table,
+        room.stall,
+        this.here(room, null),
+        Date.now(),
+        seat,
+        m.yes,
+      );
+      if (!voted.ok) return send(ws, { type: 'refused', refusal: voted.refusal });
+      const saved = { ...room, table: voted.value.table, stall: voted.value.stall };
+      this.save(saved);
+      // Every message is answered to its sender with one view or one refusal (KUB-34): a vote
+      // that did not carry changed no table, so its answer is the sender's view alone.
+      if (voted.value.drew === null) sendView(ws, saved, seat);
+      else this.tellDraw(saved, voted.value.drew);
+      return this.settle(saved, null);
     }
     const applied = apply(room.table, seat, m);
     if (!applied.ok) return send(ws, { type: 'refused', refusal: applied.refusal });
     const saved = { ...room, table: applied.value.table };
     this.save(saved);
-    const drew = applied.value.drew;
-    if (drew !== null) {
-      for (const open of this.open(null)) send(open.ws, { type: 'drew', ...drew });
-    }
-    this.broadcast(saved);
+    if (applied.value.drew === null) this.broadcast(saved);
+    else this.tellDraw(saved, applied.value.drew);
+    // The turn may have passed to a seat that is away, whose minute starts now.
+    this.settle(saved, null);
   }
 
   override webSocketClose(ws: WebSocket): void {
-    this.sendPresence(this.load(), ws);
+    this.settle(this.load(), ws);
   }
 
   override webSocketError(ws: WebSocket): void {
-    this.sendPresence(this.load(), ws);
+    this.settle(this.load(), ws);
   }
 
   /**
@@ -169,7 +193,11 @@ export class Table extends DurableObject<object> {
     const now = Date.now();
     const quiet = this.open(null).filter((o) => isStale(now, o));
     for (const { ws } of quiet) ws.close(CLOSE_GONE_QUIET, 'gone quiet');
-    if (quiet.length > 0) this.sendPresence(this.load(), null);
+    const room = this.load();
+    // While a turn is held up the sweep tells it every time, so the question opens on time
+    // and a page that missed a frame catches up: one small frame a seat each 15 s.
+    const held = room.stall !== null && awayOffer(room.stall, this.here(room, null), now) !== null;
+    if (quiet.length > 0 || held) this.settle(room, null);
     if (this.open(null).length > 0) await this.ctx.storage.setAlarm(now + SWEEP_EVERY_MS);
   }
 
@@ -187,16 +215,42 @@ export class Table extends DurableObject<object> {
     });
   }
 
-  /** Which seats have a device connected, to every open socket. */
-  private sendPresence(room: Room, except: WebSocket | null): void {
-    const open = this.open(except);
-    const here = presence(room.table.names.length, open);
-    for (const { ws } of open) send(ws, { type: 'presence', here });
+  /** Which seats have a device connected, leaving out `except`, which is closing. */
+  private here(room: Room, except: WebSocket | null): boolean[] {
+    return presence(room.table.names.length, this.open(except));
+  }
+
+  /**
+   * After anything that may change who is here, the time or whose turn it is: the core
+   * settles the stall (and may draw for an away seat, which is stored before it is told),
+   * then every open socket is told who is here and whether a turn is held up.
+   */
+  private settle(room: Room, except: WebSocket | null): void {
+    const now = Date.now();
+    const here = this.here(room, except);
+    const settled = settleAway(room.table, room.stall, here, now);
+    let saved = room;
+    if (settled.table !== room.table || settled.stall !== room.stall) {
+      saved = { ...room, table: settled.table, stall: settled.stall };
+      this.save(saved);
+    }
+    if (settled.drew !== null) this.tellDraw(saved, settled.drew, except);
+    const offer = awayOffer(saved.stall, here, now);
+    for (const { ws } of this.open(except)) {
+      send(ws, { type: 'presence', here });
+      send(ws, { type: 'away-turn', offer });
+    }
+  }
+
+  /** A draw's place in the pool to every seat, so each page's pile loses the same tile; then views. */
+  private tellDraw(room: Room, drew: Drew, except: WebSocket | null = null): void {
+    for (const open of this.open(except)) send(open.ws, { type: 'drew', ...drew });
+    this.broadcast(room, except);
   }
 
   /** Invariant 2: each socket is sent the view for its own seat, built by the core, one by one. */
-  private broadcast(room: Room): void {
-    for (const { ws, seat } of this.open(null)) sendView(ws, room, seat);
+  private broadcast(room: Room, except: WebSocket | null = null): void {
+    for (const { ws, seat } of this.open(except)) sendView(ws, room, seat);
   }
 }
 

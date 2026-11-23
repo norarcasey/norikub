@@ -75,6 +75,8 @@ export const tableRefusalSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('not-your-turn') }).readonly(),
   z.object({ kind: z.literal('game-over') }).readonly(),
   z.object({ kind: z.literal('cancelled') }).readonly(),
+  /** A vote to draw for an away seat when no turn is held up long enough to ask (`KUB-37`). */
+  z.object({ kind: z.literal('no-away-turn') }).readonly(),
 ]);
 export type TableRefusal = z.infer<typeof tableRefusalSchema>;
 

@@ -103,6 +103,8 @@ export function tableRefusalText(refusal: TableRefusal): string {
       return 'The game is over.';
     case 'cancelled':
       return 'This table has been cancelled.';
+    case 'no-away-turn':
+      return 'There is nobody away to draw for now.';
   }
 }
 

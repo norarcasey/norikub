@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { stallSchema } from '../../../packages/core/src/away.ts';
 import { parse } from '../../../packages/core/src/parse.ts';
 import { newTable, sitDown, tableSchema, type Outcome } from '../../../packages/core/src/table.ts';
 
@@ -15,11 +16,16 @@ import { newTable, sitDown, tableSchema, type Outcome } from '../../../packages/
 const roomSchema = z.object({
   table: tableSchema,
   tokens: z.array(z.string().min(1)),
+  /**
+   * The turn held up by a seat that is away, and who has agreed to draw for it (`KUB-37`,
+   * `away.ts`). A room stored before it was added has none, which is what it would have been.
+   */
+  stall: stallSchema.nullable().default(null),
 });
 export type Room = z.infer<typeof roomSchema>;
 
 export function newRoom(): Room {
-  return { table: newTable(), tokens: [] };
+  return { table: newTable(), tokens: [], stall: null };
 }
 
 /**
@@ -45,7 +51,10 @@ export function joinRoom(
   if (!sat.ok) return sat;
   const tokens = [...room.tokens];
   tokens[sat.value.seat] = token;
-  return { ok: true, value: { room: { table: sat.value.table, tokens }, seat: sat.value.seat } };
+  return {
+    ok: true,
+    value: { room: { ...room, table: sat.value.table, tokens }, seat: sat.value.seat },
+  };
 }
 
 /** The seat `token` was given, or null for a token this table never gave out. */

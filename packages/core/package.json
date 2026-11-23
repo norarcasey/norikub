@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./away": "./src/away.ts",
     "./bot": "./src/bot.ts",
     "./game": "./src/game.ts",
     "./match": "./src/match.ts",

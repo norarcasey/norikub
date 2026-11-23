@@ -288,6 +288,35 @@ describe('who is at the table', () => {
   });
 });
 
+describe('a seat away on its turn (KUB-37)', () => {
+  it('starts its clock, asks nobody before the minute, and refuses a vote until then', async () => {
+    const code = freshCode();
+    const seats = [await seatAt(code, 'Nora'), await seatAt(code, 'Kit')];
+    const [nora, kit] = seats.map((s) => new Seat(code, s.token));
+    if (nora === undefined || kit === undefined) throw new Error('two seats');
+    await nora.until((s) => s.views().length > 0);
+    await nora.send({ type: 'deal' });
+    await nora.until((s) => s.lastView().phase === 'playing');
+    await kit.until((s) => s.lastView().phase === 'playing');
+    const [mover, other] = nora.playing().current === 0 ? [nora, kit] : [kit, nora];
+    const offers = () => other.messages().filter((m) => m.type === 'away-turn');
+
+    const before = offers().length;
+    mover.close();
+    // Told with the presence that the mover is away: no question yet, a minute has not passed.
+    await other.until(() => offers().length > before);
+    expect(offers().at(-1)).toEqual({ type: 'away-turn', offer: null });
+
+    await other.send({ type: 'draw-for-away', yes: true });
+    await other.until((s) => s.messages().some((m) => m.type === 'refused'));
+    expect(other.messages().find((m) => m.type === 'refused')).toEqual({
+      type: 'refused',
+      refusal: { kind: 'table', refusal: { kind: 'no-away-turn' } },
+    });
+    other.close();
+  });
+});
+
 describe('a table played over two sockets', () => {
   it('deals, shares a reworked turn, draws, and never shows a seat another rack or the pool', async () => {
     const code = freshCode();

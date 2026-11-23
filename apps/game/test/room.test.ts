@@ -37,6 +37,12 @@ describe('the room', () => {
     expect(readRoom(JSON.stringify(room))).toEqual(room);
   });
 
+  it('reads a room stored before the stall was kept (KUB-37) as one with none', () => {
+    const room = sat(newRoom(), 't-nora', 'Nora');
+    const before = { table: room.table, tokens: room.tokens };
+    expect(readRoom(JSON.stringify(before))).toEqual({ ...room, stall: null });
+  });
+
   it('throws on a stored row that is not a room, rather than starting over on top of it', () => {
     expect(() => readRoom(JSON.stringify({ table: { phase: 'nonsense' }, tokens: [] }))).toThrow(
       /does not parse/,
