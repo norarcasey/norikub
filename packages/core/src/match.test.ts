@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Status } from './game.ts';
-import { SINGLE, matchFits, matchSchema, newMatch, nextGameOf, standing } from './match.ts';
+import {
+  SINGLE,
+  firstSeat,
+  matchFits,
+  matchSchema,
+  newMatch,
+  nextGameOf,
+  standing,
+} from './match.ts';
 import type { Match } from './match.ts';
 import { parse } from './parse.ts';
 
@@ -111,5 +119,15 @@ describe('a saved match', () => {
     expect(parse(matchSchema, { format: { kind: 'points', target: 200 }, played: [] }).ok).toBe(
       true,
     );
+  });
+});
+
+describe('who plays first (KUB-44)', () => {
+  it('moves one seat on with each game of the match, and comes round again', () => {
+    const played = (games: number): Match => ({
+      format: { kind: 'games', games: 5 },
+      played: Array.from({ length: games }, () => [0, 0, 0]),
+    });
+    expect([0, 1, 2, 3, 4].map((games) => firstSeat(played(games), 3))).toEqual([0, 1, 2, 0, 1]);
   });
 });

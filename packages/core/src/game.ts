@@ -62,9 +62,18 @@ export const gameSchema = z
   });
 export type Game = z.infer<typeof gameSchema>;
 
-export type NewGame = { readonly names: readonly string[]; readonly seed: number };
+/**
+ * `first` is the seat that plays first, 0 when not given: a match turns it round the table
+ * game by game (`firstSeat`, KUB-44) and a friends' table draws it. It is counted round the
+ * table, so no number can deal a game whose turn is at a seat nobody sits in.
+ */
+export type NewGame = {
+  readonly names: readonly string[];
+  readonly seed: number;
+  readonly first?: number;
+};
 
-export function newGame({ names, seed }: NewGame): Game {
+export function newGame({ names, seed, first = 0 }: NewGame): Game {
   const deck = shuffle(fullSet(), seededRandom(seed));
   const players = names.map((name, seat) => ({
     name,
@@ -75,7 +84,7 @@ export function newGame({ names, seed }: NewGame): Game {
     players,
     table: [],
     pool: deck.slice(names.length * RACK_SIZE),
-    current: 0,
+    current: ((first % names.length) + names.length) % names.length,
     passes: 0,
     status: { kind: 'playing' },
   };

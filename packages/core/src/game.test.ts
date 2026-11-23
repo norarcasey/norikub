@@ -33,6 +33,19 @@ describe('a new game', () => {
     const reloaded = parse(gameSchema, JSON.parse(JSON.stringify(game)));
     expect(reloaded).toEqual({ ok: true, value: game });
   });
+
+  it('opens on the seat named to play first, with the same deal (KUB-44)', () => {
+    const second = newGame({ names, seed: 42, first: 1 });
+    expect(second.current).toBe(1);
+    expect(second.players).toEqual(game.players);
+    expect(second.pool).toEqual(game.pool);
+  });
+
+  it('counts the first seat round the table', () => {
+    expect(newGame({ names, seed: 42, first: 3 }).current).toBe(0);
+    expect(newGame({ names, seed: 42, first: 5 }).current).toBe(2);
+    expect(newGame({ names, seed: 42, first: -1 }).current).toBe(2);
+  });
 });
 
 describe('reading a saved game back', () => {

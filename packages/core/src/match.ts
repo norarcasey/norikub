@@ -35,6 +35,16 @@ export function newMatch(format: MatchFormat): Match {
   return { format, played: [] };
 }
 
+/**
+ * The seat that plays first in the match's next game to be dealt: seat 0 in the first, then
+ * one seat on per game, as the first player changes hands at a real table (KUB-44). Playing
+ * first is a small edge, and over a match of several games it would otherwise always be one
+ * player's.
+ */
+export function firstSeat(match: Match, seats: number): number {
+  return match.played.length % seats;
+}
+
 /** True when every finished game has a score for each of `seats`, as a match for them must. */
 export function matchFits(match: Match, seats: number): boolean {
   return match.played.every((scores) => scores.length === seats);

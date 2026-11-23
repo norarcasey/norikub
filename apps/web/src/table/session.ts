@@ -2,7 +2,7 @@ import { botFor, takeBotTurn } from '@norikub/core/bot';
 import type { Level } from '@norikub/core/bot';
 import { newGame } from '@norikub/core/game';
 import type { Game } from '@norikub/core/game';
-import { SINGLE, newMatch, nextGameOf, standing } from '@norikub/core/match';
+import { SINGLE, firstSeat, newMatch, nextGameOf, standing } from '@norikub/core/match';
 import type { Match, MatchFormat } from '@norikub/core/match';
 import { summarizeTurn } from '@norikub/core/summary';
 import type { TurnSummary } from '@norikub/core/summary';
@@ -144,7 +144,8 @@ export function inProgress(session: Session): boolean {
 }
 
 function deal(seed: number, sitting: Sitting): Session {
-  const game = newGame({ names: ['You', ...botNames(sitting.lineup)], seed });
+  const names = ['You', ...botNames(sitting.lineup)];
+  const game = newGame({ names, seed, first: firstSeat(sitting.match, names.length) });
   return fromGame(game, [], undefined, [], undefined, sitting);
 }
 

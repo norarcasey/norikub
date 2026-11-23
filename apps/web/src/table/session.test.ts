@@ -108,6 +108,26 @@ describe('a match (KUB-42)', () => {
     });
   });
 
+  it('opens each game on the next seat round, with the bots due first played back (KUB-44)', () => {
+    const s = newSession(7, {
+      lineup: seatsFor(['hard', 'easy']),
+      format: { kind: 'games', games: 3 },
+    });
+    expect(s.replay).toEqual([]);
+    const second = nextGame(finished(s, [20, -5, -15]), 8);
+    if (second === null) throw new Error('no second game');
+    // The person is seat 0: game 2 opens on Bot 1, and game 3 on Bot 2, so the bots between
+    // have played before the person's first turn of it, and the screen plays them back.
+    expect(second.game.current).toBe(0);
+    expect(second.turn).not.toBeNull();
+    expect(second.replay.map((frame) => frame.seat)).toContain(1);
+    expect(second.replay.map((frame) => frame.seat)).toContain(2);
+    const third = nextGame(finished(second, [20, -5, -15]), 9);
+    if (third === null) throw new Error('no third game');
+    expect(third.replay.map((frame) => frame.seat)).not.toContain(1);
+    expect(third.replay.map((frame) => frame.seat)).toContain(2);
+  });
+
   it('deals no next game mid-game, or once the match is over', () => {
     const s = newSession(7, {
       lineup: seatsFor(['hard', 'easy']),

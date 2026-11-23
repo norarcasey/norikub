@@ -129,12 +129,9 @@ export function deal(table: Table, seat: number, seed: number): Outcome<Table> {
   if (seat !== 0) return refused({ kind: 'only-the-first-seat-deals' });
   if (table.names.length < MIN_SEATS) return refused({ kind: 'waiting-for-players' });
   const random = seededRandom(seed);
-  const current = Math.floor(random() * table.names.length);
-  const game = newGame({ names: table.names, seed: Math.floor(random() * 2 ** 32) });
-  return {
-    ok: true,
-    value: { phase: 'playing', names: table.names, game: { ...game, current }, working: null },
-  };
+  const first = Math.floor(random() * table.names.length);
+  const game = newGame({ names: table.names, seed: Math.floor(random() * 2 ** 32), first });
+  return { ok: true, value: { phase: 'playing', names: table.names, game, working: null } };
 }
 
 /**
